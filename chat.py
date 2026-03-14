@@ -153,7 +153,7 @@ def render_survey() -> None:
     with col1:
         gender = st.radio(
             "성별",
-            options=["남성", "여성", "기타 / 말하고 싶지 않아요"],
+            options=["남성", "여성"],
             index=0,
         )
 
