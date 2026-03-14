@@ -179,6 +179,7 @@ def render_sidebar() -> SidebarConfig:
             }
             fname = datetime.datetime.now().strftime("마음다시보기_%Y%m%d_%H%M")
 
+            st.caption("💾 대화 다운로드")
             col1, col2 = st.columns(2)
             with col1:
                 st.download_button(
@@ -187,6 +188,7 @@ def render_sidebar() -> SidebarConfig:
                     file_name=f"{fname}.txt",
                     mime="text/plain",
                     use_container_width=True,
+                    key="dl_txt",
                 )
             with col2:
                 st.download_button(
@@ -195,6 +197,7 @@ def render_sidebar() -> SidebarConfig:
                     file_name=f"{fname}.json",
                     mime="application/json",
                     use_container_width=True,
+                    key="dl_json",
                 )
             st.divider()
 
