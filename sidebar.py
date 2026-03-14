@@ -168,38 +168,42 @@ def render_sidebar() -> SidebarConfig:
 
         st.divider()
 
-        # ── 대화 다운로드 (메시지가 있을 때만) ─────────────────
-        messages = st.session_state.get("messages", [])
-        if messages:
-            profile = {
-                "gender":      st.session_state.get("user_gender", "-"),
-                "age":         st.session_state.get("user_age", "-"),
-                "mood":        st.session_state.get("user_mood", "-"),
-                "style_label": STYLE_LABELS.get(st.session_state.get("chat_style", ""), "-"),
-            }
-            fname = datetime.datetime.now().strftime("마음다시보기_%Y%m%d_%H%M")
+        # ── 대화 다운로드 ────────────────────────────────────────
+        messages  = st.session_state.get("messages", [])
+        has_msgs  = bool(messages)
+        profile   = {
+            "gender":      st.session_state.get("user_gender", "-"),
+            "age":         st.session_state.get("user_age", "-"),
+            "mood":        st.session_state.get("user_mood", "-"),
+            "style_label": STYLE_LABELS.get(st.session_state.get("chat_style", ""), "-"),
+        }
+        fname = datetime.datetime.now().strftime("마음다시보기_%Y%m%d_%H%M")
+        txt_data  = _build_txt(messages, profile)  if has_msgs else " "
+        json_data = _build_json(messages, profile) if has_msgs else "{}"
 
-            st.caption("💾 대화 다운로드")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.download_button(
-                    label="📄 TXT",
-                    data=_build_txt(messages, profile),
-                    file_name=f"{fname}.txt",
-                    mime="text/plain",
-                    use_container_width=True,
-                    key="dl_txt",
-                )
-            with col2:
-                st.download_button(
-                    label="🗂 JSON",
-                    data=_build_json(messages, profile),
-                    file_name=f"{fname}.json",
-                    mime="application/json",
-                    use_container_width=True,
-                    key="dl_json",
-                )
-            st.divider()
+        st.caption("💾 대화 다운로드")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="📄 TXT",
+                data=txt_data,
+                file_name=f"{fname}.txt",
+                mime="text/plain",
+                use_container_width=True,
+                disabled=not has_msgs,
+                key="dl_txt",
+            )
+        with col2:
+            st.download_button(
+                label="🗂 JSON",
+                data=json_data,
+                file_name=f"{fname}.json",
+                mime="application/json",
+                use_container_width=True,
+                disabled=not has_msgs,
+                key="dl_json",
+            )
+        st.divider()
 
         # ── 액션 버튼들 ─────────────────────────────────────────
         if st.button("🗑️ 대화 초기화", use_container_width=True):
