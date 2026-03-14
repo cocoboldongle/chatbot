@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import streamlit as st
 from sidebar import render_sidebar
-from chat import apply_styles, render_header, init_session, render_history, render_chat_input
+from chat import apply_styles, render_main
 
 st.set_page_config(
     page_title="마음 다시 보기",
@@ -17,7 +17,4 @@ st.set_page_config(
 
 apply_styles()
 config = render_sidebar()
-render_header()
-init_session()
-render_history()
-render_chat_input(config)
+render_main(config)
