@@ -5,8 +5,8 @@ ui/chat.py
 실제 API 호출은 core/llm.py의 stream_chat()에 위임합니다.
 """
 import streamlit as st
-from core.llm import get_api_key, stream_chat
-from ui.sidebar import SidebarConfig
+from llm import get_api_key, stream_chat
+from sidebar import SidebarConfig
 
 
 def apply_styles() -> None:
