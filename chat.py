@@ -515,6 +515,14 @@ def render_chat_input(config: SidebarConfig) -> None:
         with st.chat_message("user", avatar="🧑"):
             st.markdown(prompt)
 
+        # ── 정보 수집 단계: 챗봇 응답 전에 먼저 충분성 체크 ────────────────
+        if phase == "collecting":
+            result = check_info_sufficient(api_key, st.session_state.messages)
+            if result.get("sufficient"):
+                st.session_state.phase          = "confirming"
+                st.session_state.collected_info = result
+                st.rerun()   # 챗봇 응답 없이 바로 요약 카드로 전환
+
         style  = STYLES[st.session_state.chat_style]
         suffix = INFO_GATHERING_SUFFIX if phase == "collecting" else REFRAMING_SUFFIX
 
@@ -555,14 +563,6 @@ def render_chat_input(config: SidebarConfig) -> None:
                 st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-        # ── 정보 수집 단계일 때만 충분성 체크 ──────────────────────────────
-        if phase == "collecting":
-            result = check_info_sufficient(api_key, st.session_state.messages)
-            if result.get("sufficient"):
-                st.session_state.phase          = "confirming"
-                st.session_state.collected_info = result
-                st.rerun()
 
 
 def render_main(config: SidebarConfig) -> None:
