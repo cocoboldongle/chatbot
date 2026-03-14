@@ -388,7 +388,6 @@ def render_chat_input(config: SidebarConfig) -> None:
 
 
 def render_main(config: SidebarConfig) -> None:
-    init_session()
     if not st.session_state.intro_done:
         render_intro()
     elif not st.session_state.survey_done:
