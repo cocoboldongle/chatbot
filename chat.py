@@ -234,10 +234,14 @@ def render_style_select() -> None:
         for col, key in zip(cols, row):
             s = STYLES[key]
             with col:
+                bg  = s['color']
+                bdr = s['border']
+                lbl = s['label']
+                dsc = s['desc']
                 st.markdown(
-                    f"<div class='style-card' style='background:{s[\"color\"]};border:1.5px solid {s[\"border\"]};'>"
-                    f"<div class='style-name'>{s['label']}</div>"
-                    f"<div class='style-desc'>{s['desc']}</div>"
+                    f"<div class='style-card' style='background:{bg};border:1.5px solid {bdr};'>"
+                    f"<div class='style-name'>{lbl}</div>"
+                    f"<div class='style-desc'>{dsc}</div>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
