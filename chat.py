@@ -1,8 +1,5 @@
 """
-ui/chat.py
-──────────────────────────────────────────────
-채팅 화면 렌더링만 담당합니다.
-실제 API 호출은 core/llm.py의 stream_chat()에 위임합니다.
+chat.py — 채팅 화면 렌더링
 """
 import streamlit as st
 from llm import get_api_key, stream_chat
@@ -10,71 +7,132 @@ from sidebar import SidebarConfig
 
 
 def apply_styles() -> None:
-    """전역 CSS를 주입합니다."""
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
 
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Noto Sans KR', sans-serif;
     }
 
-    .stChatMessage {
-        border-radius: 12px;
-        padding: 4px 0;
+    /* 전체 배경 */
+    .stApp {
+        background-color: #f7f9fc;
     }
 
-    h1 {
-        font-weight: 600;
-        font-size: 1.6rem !important;
-    }
-
+    /* 사이드바 */
     section[data-testid="stSidebar"] {
-        background-color: #f8f9fa;
+        background-color: #ffffff;
+        border-right: 1px solid #e8edf2;
+    }
+
+    /* 채팅 말풍선 — 사용자 */
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+        background-color: #e8f4fd;
+        border-radius: 16px;
+        padding: 12px 16px;
+        margin: 6px 0;
+    }
+
+    /* 채팅 말풍선 — 어시스턴트 */
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
+        background-color: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #e8edf2;
+        padding: 12px 16px;
+        margin: 6px 0;
+    }
+
+    /* 입력창 */
+    .stChatInputContainer {
+        border-top: 1px solid #e8edf2;
+        background-color: #f7f9fc;
+        padding-top: 8px;
+    }
+
+    textarea[data-testid="stChatInput"] {
+        border-radius: 20px !important;
+        border: 1.5px solid #d0dce8 !important;
+        background-color: #ffffff !important;
+        font-family: 'Noto Sans KR', sans-serif !important;
+        font-size: 0.95rem !important;
+    }
+
+    /* 타이틀 */
+    h1 {
+        font-size: 1.5rem !important;
+        font-weight: 700 !important;
+        color: #2c3e50 !important;
+    }
+
+    /* 구분선 */
+    hr {
+        border-color: #e8edf2 !important;
+        margin: 8px 0 16px 0 !important;
+    }
+
+    /* 웰컴 카드 */
+    .welcome-card {
+        background: #ffffff;
+        border: 1px solid #e8edf2;
+        border-radius: 16px;
+        padding: 20px 24px;
+        margin: 16px 0 24px 0;
+        color: #4a5568;
+        font-size: 0.92rem;
+        line-height: 1.7;
+    }
+
+    .welcome-card b {
+        color: #2c7be5;
     }
     </style>
     """, unsafe_allow_html=True)
 
 
 def render_header() -> None:
-    """페이지 상단 타이틀 영역을 렌더링합니다."""
-    st.title("🤖 GPT-4o Chatbot")
-    st.caption("Powered by OpenAI GPT-4o · Built with Streamlit")
+    st.title("🌱 마음 다시 보기")
+    st.caption("생각을 새롭게, 마음을 가볍게")
     st.divider()
+
+    # 대화가 아직 없을 때만 웰컴 카드 표시
+    if not st.session_state.get("messages"):
+        st.markdown("""
+        <div class="welcome-card">
+            안녕하세요 👋<br>
+            오늘 어떤 생각이나 감정이 마음에 걸리나요?<br><br>
+            <b>마음 다시 보기</b>는 여러분이 힘든 생각을 새로운 시각으로
+            바라볼 수 있도록 함께 이야기를 나눠드려요.<br><br>
+            편하게 말씀해 주세요. 판단 없이 들을게요. 🤍
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def init_session() -> None:
-    """세션 상태를 초기화합니다."""
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
 
 def render_history() -> None:
-    """저장된 대화 기록을 화면에 출력합니다."""
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
+        avatar = "🧑" if msg["role"] == "user" else "🌱"
+        with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
 
 def render_chat_input(config: SidebarConfig) -> None:
-    """
-    채팅 입력창을 렌더링하고, 입력이 들어오면
-    core/llm.stream_chat()을 호출해 스트리밍 응답을 보여줍니다.
-    """
-    if prompt := st.chat_input("메시지를 입력하세요..."):
+    if prompt := st.chat_input("오늘 어떤 생각이 드나요?"):
         api_key = get_api_key(config.api_key_input)
 
         if not api_key:
             st.error("⚠️ OpenAI API 키를 사이드바에 입력하거나 `.streamlit/secrets.toml`에 설정해주세요.")
             st.stop()
 
-        # 사용자 메시지 저장 & 출력
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar="🧑"):
             st.markdown(prompt)
 
-        # 어시스턴트 응답 스트리밍
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar="🌱"):
             placeholder = st.empty()
             full_response = ""
 
@@ -92,7 +150,7 @@ def render_chat_input(config: SidebarConfig) -> None:
                 placeholder.markdown(full_response)
 
             except Exception as e:
-                st.error(f"❌ API 오류: {e}")
+                st.error(f"❌ 오류가 발생했어요: {e}")
                 st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
