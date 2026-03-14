@@ -50,6 +50,15 @@ def render_sidebar() -> SidebarConfig:
                 st.session_state.chat_style   = None
                 st.rerun()
 
+        # 처음으로 — 인트로부터 전체 재시작
+        if st.session_state.get("intro_done"):
+            if st.button("🏠 처음으로", use_container_width=True):
+                for key in ["intro_done","survey_done","style_chosen",
+                            "messages","user_gender","user_age","user_mood","chat_style"]:
+                    st.session_state[key] = ([] if key == "messages" else
+                                             False if key in ["intro_done","survey_done","style_chosen"] else None)
+                st.rerun()
+
         st.divider()
         st.markdown(
             "<div style='font-size:0.75rem; color:#888; line-height:1.6;'>"
