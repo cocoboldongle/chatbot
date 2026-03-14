@@ -3,7 +3,7 @@ chat.py — 채팅 화면 렌더링
 흐름: 인트로(안내) → 설문 → 스타일 선택 → 채팅
 """
 import streamlit as st
-from llm import get_api_key, stream_chat
+from llm import stream_chat
 from sidebar import SidebarConfig
 
 STYLES = {
@@ -345,9 +345,12 @@ def render_history() -> None:
 
 def render_chat_input(config: SidebarConfig) -> None:
     if prompt := st.chat_input("오늘 어떤 생각이 드나요?"):
-        api_key = get_api_key(config.api_key_input)
+        try:
+            api_key = st.secrets["OPENAI_API_KEY"]
+        except Exception:
+            api_key = ""
         if not api_key:
-            st.error("⚠️ OpenAI API 키를 사이드바에 입력하거나 `.streamlit/secrets.toml`에 설정해주세요.")
+            st.error("⚠️ `.streamlit/secrets.toml`에 OPENAI_API_KEY를 설정해주세요.")
             st.stop()
 
         st.session_state.messages.append({"role": "user", "content": prompt})
