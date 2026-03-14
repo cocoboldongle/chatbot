@@ -5,6 +5,12 @@ app.py
 페이지 설정 후 ui/sidebar.py, ui/chat.py를 조립합니다.
 비즈니스 로직은 core/, UI 렌더링은 ui/ 에 있습니다.
 """
+import sys
+import os
+
+# Streamlit Cloud에서 하위 패키지(ui, core)를 찾을 수 있도록 루트 경로 추가
+sys.path.insert(0, os.path.dirname(__file__))
+
 import streamlit as st
 from ui.sidebar import render_sidebar
 from ui.chat import apply_styles, render_header, init_session, render_history, render_chat_input
