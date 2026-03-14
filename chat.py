@@ -1,6 +1,6 @@
 """
 chat.py — 채팅 화면 렌더링
-흐름: 설문 → 대화 스타일 선택 → 채팅
+흐름: 인트로 → 설문 → 스타일 선택 → 채팅
 """
 import streamlit as st
 from llm import get_api_key, stream_chat
@@ -70,12 +70,14 @@ STYLES = {
     },
 }
 
+MOOD_EMOJIS = ["😭","😢","😟","😕","😐","🙂","😊","😄","😁","🤩","🥳"]
+
 
 # ── 스타일 CSS ────────────────────────────────────────────────────────────────
 def apply_styles() -> None:
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
 
     html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
     .stApp { background-color: #f7f9fc; }
@@ -87,22 +89,17 @@ def apply_styles() -> None:
 
     [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
         background-color: #e8f4fd;
-        border-radius: 16px;
-        padding: 12px 16px;
-        margin: 6px 0;
+        border-radius: 16px; padding: 12px 16px; margin: 6px 0;
     }
     [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
         background-color: #ffffff;
-        border-radius: 16px;
-        border: 1px solid #e8edf2;
-        padding: 12px 16px;
-        margin: 6px 0;
+        border-radius: 16px; border: 1px solid #e8edf2;
+        padding: 12px 16px; margin: 6px 0;
     }
 
     .stChatInputContainer {
         border-top: 1px solid #e8edf2;
-        background-color: #f7f9fc;
-        padding-top: 8px;
+        background-color: #f7f9fc; padding-top: 8px;
     }
     textarea[data-testid="stChatInput"] {
         border-radius: 20px !important;
@@ -115,58 +112,109 @@ def apply_styles() -> None:
     h1 { font-size: 1.5rem !important; font-weight: 700 !important; color: #2c3e50 !important; }
     hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 
+    /* ── 인트로 화면 ── */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(18px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeInSlow {
+        0%   { opacity: 0; }
+        40%  { opacity: 0; }
+        100% { opacity: 1; }
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.4; }
+    }
+
+    .intro-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 62vh;
+        text-align: center;
+        padding: 40px 20px;
+    }
+    .intro-icon {
+        font-size: 4rem;
+        animation: fadeIn 0.8s ease both;
+        animation-delay: 0.1s;
+        margin-bottom: 20px;
+    }
+    .intro-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1e293b;
+        letter-spacing: -0.5px;
+        animation: fadeIn 0.9s ease both;
+        animation-delay: 0.5s;
+        opacity: 0;
+        animation-fill-mode: forwards;
+    }
+    .intro-sub {
+        font-size: 1rem;
+        color: #64748b;
+        font-weight: 300;
+        margin-top: 10px;
+        animation: fadeIn 0.9s ease both;
+        animation-delay: 1.1s;
+        opacity: 0;
+        animation-fill-mode: forwards;
+    }
+    .intro-divider {
+        width: 40px; height: 2px;
+        background: linear-gradient(90deg, #93c5fd, #6ee7b7);
+        border-radius: 2px;
+        margin: 22px auto;
+        animation: fadeInSlow 2s ease both;
+        animation-delay: 0.3s;
+        opacity: 0;
+        animation-fill-mode: forwards;
+    }
+    .intro-btn-wrap {
+        animation: fadeIn 1s ease both;
+        animation-delay: 1.8s;
+        opacity: 0;
+        animation-fill-mode: forwards;
+        margin-top: 10px;
+        width: 100%;
+        max-width: 280px;
+    }
+
     /* 설문 카드 */
     .survey-card {
-        background: #ffffff;
-        border: 1px solid #e8edf2;
-        border-radius: 20px;
-        padding: 28px 32px;
-        margin: 8px 0 24px 0;
+        background: #ffffff; border: 1px solid #e8edf2;
+        border-radius: 20px; padding: 28px 32px; margin: 8px 0 24px 0;
     }
     .survey-title { font-size: 1.05rem; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
     .survey-sub   { font-size: 0.85rem; color: #8a9bb0; margin-bottom: 20px; }
 
     /* 스타일 선택 카드 */
     .style-card {
-        border-radius: 16px;
-        padding: 18px 20px;
-        margin-bottom: 4px;
-        cursor: pointer;
-        transition: box-shadow .15s;
+        border-radius: 16px; padding: 18px 20px; margin-bottom: 4px;
     }
-    .style-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
     .style-name { font-weight: 700; font-size: 1rem; color: #2c3e50; }
     .style-desc { font-size: 0.82rem; color: #6b7280; margin-top: 2px; }
 
     /* 웰컴 카드 */
     .welcome-card {
-        background: #ffffff;
-        border: 1px solid #e8edf2;
-        border-radius: 16px;
-        padding: 20px 24px;
-        margin: 16px 0 24px 0;
-        color: #4a5568;
-        font-size: 0.92rem;
-        line-height: 1.7;
+        background: #ffffff; border: 1px solid #e8edf2;
+        border-radius: 16px; padding: 20px 24px; margin: 16px 0 24px 0;
+        color: #4a5568; font-size: 0.92rem; line-height: 1.7;
     }
     .welcome-card b { color: #2c7be5; }
     </style>
     """, unsafe_allow_html=True)
 
 
-# ── 헤더 ──────────────────────────────────────────────────────────────────────
-def render_header() -> None:
-    st.title("🌱 마음 다시 보기")
-    st.caption("생각을 새롭게, 마음을 가볍게")
-    st.divider()
-
-
 # ── 세션 초기화 ───────────────────────────────────────────────────────────────
 def init_session() -> None:
     defaults = {
-        "messages":      [],
+        "intro_done":    False,
         "survey_done":   False,
         "style_chosen":  False,
+        "messages":      [],
         "user_gender":   None,
         "user_age":      None,
         "user_mood":     None,
@@ -177,8 +225,37 @@ def init_session() -> None:
             st.session_state[key] = val
 
 
+# ── STEP 0 : 인트로 화면 ──────────────────────────────────────────────────────
+def render_intro() -> None:
+    st.markdown("""
+    <div class="intro-wrap">
+        <div class="intro-icon">🌱</div>
+        <div class="intro-title">마음 다시 보기</div>
+        <div class="intro-sub">생각을 새롭게, 마음을 가볍게</div>
+        <div class="intro-divider"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 버튼을 중앙 정렬 (3칸 중 가운데)
+    _, col, _ = st.columns([1, 2, 1])
+    with col:
+        # 버튼이 애니메이션 뒤에 뜨도록 딜레이 CSS 적용
+        st.markdown(
+            "<div class='intro-btn-wrap' style='margin:0 auto;'>",
+            unsafe_allow_html=True,
+        )
+        if st.button("시작하기  →", type="primary", use_container_width=True):
+            st.session_state.intro_done = True
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
 # ── STEP 1 : 설문 ─────────────────────────────────────────────────────────────
-MOOD_EMOJIS = ["😭","😢","😟","😕","😐","🙂","😊","😄","😁","🤩","🥳"]
+def render_header() -> None:
+    st.title("🌱 마음 다시 보기")
+    st.caption("생각을 새롭게, 마음을 가볍게")
+    st.divider()
+
 
 def render_survey() -> None:
     st.markdown("""
@@ -196,7 +273,6 @@ def render_survey() -> None:
                            format_func=lambda x: f"{x}세")
 
     st.markdown("<br>", unsafe_allow_html=True)
-
     mood = st.slider("지금 기분이 어때요?  (0 = 매우 나쁨 · 10 = 매우 좋음)",
                      min_value=0, max_value=10, value=5, step=1)
     st.markdown(
@@ -204,18 +280,17 @@ def render_survey() -> None:
         f"{MOOD_EMOJIS[mood]}</div>",
         unsafe_allow_html=True,
     )
-
     st.markdown("<br>", unsafe_allow_html=True)
 
     if st.button("다음 →", type="primary", use_container_width=True):
-        st.session_state.survey_done  = True
-        st.session_state.user_gender  = gender
-        st.session_state.user_age     = age
-        st.session_state.user_mood    = mood
+        st.session_state.survey_done = True
+        st.session_state.user_gender = gender
+        st.session_state.user_age    = age
+        st.session_state.user_mood   = mood
         st.rerun()
 
 
-# ── STEP 2 : 대화 스타일 선택 ────────────────────────────────────────────────
+# ── STEP 2 : 스타일 선택 ─────────────────────────────────────────────────────
 def render_style_select() -> None:
     st.markdown("""
     <div class="survey-card">
@@ -224,20 +299,16 @@ def render_style_select() -> None:
     </div>
     """, unsafe_allow_html=True)
 
-    # 2×2 그리드
-    keys   = list(STYLES.keys())
-    row1   = keys[:2]
-    row2   = keys[2:]
-
-    for row in [row1, row2]:
+    keys = list(STYLES.keys())
+    for row in [keys[:2], keys[2:]]:
         cols = st.columns(2)
         for col, key in zip(cols, row):
-            s = STYLES[key]
+            s   = STYLES[key]
+            bg  = s['color']
+            bdr = s['border']
+            lbl = s['label']
+            dsc = s['desc']
             with col:
-                bg  = s['color']
-                bdr = s['border']
-                lbl = s['label']
-                dsc = s['desc']
                 st.markdown(
                     f"<div class='style-card' style='background:{bg};border:1.5px solid {bdr};'>"
                     f"<div class='style-name'>{lbl}</div>"
@@ -245,7 +316,7 @@ def render_style_select() -> None:
                     f"</div>",
                     unsafe_allow_html=True,
                 )
-                if st.button(f"선택", key=f"style_{key}", use_container_width=True):
+                if st.button("선택", key=f"style_{key}", use_container_width=True):
                     st.session_state.style_chosen = True
                     st.session_state.chat_style   = key
                     st.rerun()
@@ -254,16 +325,20 @@ def render_style_select() -> None:
 # ── STEP 3 : 채팅 ─────────────────────────────────────────────────────────────
 def render_history() -> None:
     if not st.session_state.messages:
-        style  = STYLES[st.session_state.chat_style]
-        mood   = st.session_state.user_mood
-        emoji  = MOOD_EMOJIS[mood]
-        st.markdown(f"""
-        <div class="welcome-card" style="border-color:{style['border']};">
-            {style['avatar']} <b>{style['label']}</b> 스타일로 대화를 시작할게요!<br><br>
-            오늘 기분이 <b>{mood}점</b>이군요 {emoji}&nbsp;
-            편하게 이야기해 주세요. 판단 없이 들을게요. 🤍
-        </div>
-        """, unsafe_allow_html=True)
+        style = STYLES[st.session_state.chat_style]
+        mood  = st.session_state.user_mood
+        emoji = MOOD_EMOJIS[mood]
+        bdr   = style['border']
+        av    = style['avatar']
+        lbl   = style['label']
+        st.markdown(
+            f"<div class='welcome-card' style='border-color:{bdr};'>"
+            f"{av} <b>{lbl}</b> 스타일로 대화를 시작할게요!<br><br>"
+            f"오늘 기분이 <b>{mood}점</b>이군요 {emoji}&nbsp;"
+            f"편하게 이야기해 주세요. 판단 없이 들을게요. 🤍"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
     for msg in st.session_state.messages:
         avatar = "🧑" if msg["role"] == "user" else STYLES[st.session_state.chat_style]["avatar"]
@@ -279,12 +354,10 @@ def render_chat_input(config: SidebarConfig) -> None:
             st.stop()
 
         st.session_state.messages.append({"role": "user", "content": prompt})
-        avatar_user = "🧑"
-        with st.chat_message("user", avatar=avatar_user):
+        with st.chat_message("user", avatar="🧑"):
             st.markdown(prompt)
 
         style = STYLES[st.session_state.chat_style]
-
         enriched_system = (
             style["prompt"]
             + f"\n\n[사용자 정보] 성별: {st.session_state.user_gender}, "
@@ -316,13 +389,17 @@ def render_chat_input(config: SidebarConfig) -> None:
 
 # ── 메인 분기 ─────────────────────────────────────────────────────────────────
 def render_main(config: SidebarConfig) -> None:
-    render_header()
     init_session()
 
-    if not st.session_state.survey_done:
+    if not st.session_state.intro_done:
+        render_intro()
+    elif not st.session_state.survey_done:
+        render_header()
         render_survey()
     elif not st.session_state.style_chosen:
+        render_header()
         render_style_select()
     else:
+        render_header()
         render_history()
         render_chat_input(config)
