@@ -81,7 +81,6 @@ SIDEBAR_CSS = """
 
 @dataclass
 class SidebarConfig:
-    api_key_input: str
     temperature: float
     max_tokens: int
     system_prompt: str
@@ -130,14 +129,6 @@ def render_sidebar() -> SidebarConfig:
         st.markdown("### 🌱 마음 다시 보기")
         st.caption("인지 재구조화 챗봇")
         st.divider()
-
-        # ── API 키 ──────────────────────────────────────────────
-        api_key_input = st.text_input(
-            "OpenAI API Key",
-            type="password",
-            placeholder="sk-...",
-            help="secrets.toml에 설정하거나 여기에 입력하세요.",
-        )
 
         # ── 사용자 프로필 (설문 완료 후 표시) ──────────────────
         if st.session_state.get("survey_done"):
@@ -240,7 +231,6 @@ def render_sidebar() -> SidebarConfig:
         )
 
     return SidebarConfig(
-        api_key_input=api_key_input,
         temperature=temperature,
         max_tokens=max_tokens,
         system_prompt="",
