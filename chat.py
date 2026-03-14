@@ -1,9 +1,9 @@
 """
 chat.py — 채팅 화면 렌더링
-흐름: 인트로(안내) → 설문 → 스타일 선택 → 채팅
+흐름: 인트로 → 설문 → 스타일 선택 → 정보수집 채팅 → 요약 확인 → 인지 재구조화
 """
 import streamlit as st
-from llm import stream_chat
+from llm import stream_chat, check_info_sufficient
 from sidebar import SidebarConfig
 
 STYLES = {
@@ -60,6 +60,31 @@ STYLES = {
     },
 }
 
+# 정보 수집 단계 전용 시스템 프롬프트
+INFO_GATHERING_SUFFIX = """
+
+[현재 단계: 정보 수집]
+지금은 사용자의 상황을 충분히 파악하는 단계야.
+아래 4가지를 자연스러운 대화 속에서 파악해줘:
+1. 어떤 상황/사건이 있었는지
+2. 그 상황에서 어떤 생각이 들었는지
+3. 그 생각으로 어떤 감정을 느꼈는지
+4. 그 감정의 강도나 영향
+
+한 번에 여러 질문을 쏟아내지 말고, 자연스럽게 하나씩 물어봐.
+아직 인지 재구조화나 조언은 하지 마. 먼저 충분히 들어줘.
+"""
+
+REFRAMING_SUFFIX = """
+
+[현재 단계: 인지 재구조화]
+사용자의 상황, 생각, 감정을 충분히 파악했어.
+이제 본격적으로 인지 재구조화를 도와줘:
+- 생각 패턴의 인지 왜곡을 부드럽게 탐색
+- 다른 시각이나 관점 제시
+- 보다 균형잡힌 생각으로 이끌기
+"""
+
 MOOD_EMOJIS = ["😭", "😢", "😟", "😕", "😐", "🙂", "😊", "😄", "😁", "🤩", "🥳"]
 
 CSS = """
@@ -84,7 +109,6 @@ textarea[data-testid="stChatInput"] {
 h1 { font-size: 1.5rem !important; font-weight: 700 !important; color: #2c3e50 !important; }
 hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 
-/* ── 공통 페이지 전환 애니메이션 ── */
 @keyframes pageEnter {
     from { opacity: 0; transform: translateY(24px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -103,18 +127,13 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* 모든 화면 전환에 적용되는 래퍼 */
-.page-enter {
-    animation: pageEnter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-/* 카드들을 순서대로 등장시키는 stagger */
+.page-enter { animation: pageEnter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .page-enter .stagger-1 { animation: pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) 0.05s both; opacity: 0; animation-fill-mode: forwards; }
 .page-enter .stagger-2 { animation: pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) 0.15s both; opacity: 0; animation-fill-mode: forwards; }
 .page-enter .stagger-3 { animation: pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) 0.25s both; opacity: 0; animation-fill-mode: forwards; }
 .page-enter .stagger-4 { animation: pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) 0.35s both; opacity: 0; animation-fill-mode: forwards; }
 .page-enter .stagger-btn { animation: scaleIn 0.4s cubic-bezier(0.22,1,0.36,1) 0.45s both; opacity: 0; animation-fill-mode: forwards; }
 
-/* ── 인트로 전용 ── */
 .intro-wrap {
     display: flex; flex-direction: column; align-items: center;
     justify-content: center; min-height: 28vh; text-align: center; padding: 40px 20px 16px;
@@ -122,32 +141,22 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 .intro-icon { font-size: 4rem; animation: fadeIn 0.8s ease both; animation-delay: 0.1s; margin-bottom: 20px; }
 .intro-title {
     font-size: 2rem; font-weight: 700; color: #1e293b; letter-spacing: -0.5px;
-    animation: fadeIn 0.9s ease both; animation-delay: 0.5s;
-    opacity: 0; animation-fill-mode: forwards;
+    animation: fadeIn 0.9s ease both; animation-delay: 0.5s; opacity: 0; animation-fill-mode: forwards;
 }
 .intro-sub {
     font-size: 1rem; color: #64748b; font-weight: 300; margin-top: 10px;
-    animation: fadeIn 0.9s ease both; animation-delay: 1.1s;
-    opacity: 0; animation-fill-mode: forwards;
+    animation: fadeIn 0.9s ease both; animation-delay: 1.1s; opacity: 0; animation-fill-mode: forwards;
 }
 .intro-divider {
-    width: 40px; height: 2px;
-    background: linear-gradient(90deg, #93c5fd, #6ee7b7);
+    width: 40px; height: 2px; background: linear-gradient(90deg, #93c5fd, #6ee7b7);
     border-radius: 2px; margin: 20px auto;
-    animation: fadeInSlow 2s ease both; animation-delay: 0.3s;
-    opacity: 0; animation-fill-mode: forwards;
+    animation: fadeInSlow 2s ease both; animation-delay: 0.3s; opacity: 0; animation-fill-mode: forwards;
 }
-.notice-wrap {
-    animation: fadeIn 1s ease both; animation-delay: 1.6s;
-    opacity: 0; animation-fill-mode: forwards;
-}
+.notice-wrap { animation: fadeIn 1s ease both; animation-delay: 1.6s; opacity: 0; animation-fill-mode: forwards; }
 .intro-btn-wrap {
-    animation: fadeIn 1s ease both; animation-delay: 2.4s;
-    opacity: 0; animation-fill-mode: forwards;
+    animation: fadeIn 1s ease both; animation-delay: 2.4s; opacity: 0; animation-fill-mode: forwards;
     margin-top: 8px; width: 100%; max-width: 280px;
 }
-
-/* ── 안내 카드 ── */
 .notice-card {
     background: #ffffff; border: 1px solid #e8edf2; border-radius: 16px;
     padding: 18px 22px; margin-bottom: 10px;
@@ -162,23 +171,53 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     font-size: 0.86rem; color: #92400e; line-height: 1.75; text-align: left;
 }
 .notice-warn b { color: #b45309; }
-
-/* ── 설문·스타일 카드 ── */
 .survey-card { background: #ffffff; border: 1px solid #e8edf2; border-radius: 20px; padding: 28px 32px; margin: 8px 0 24px 0; }
 .survey-title { font-size: 1.05rem; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
 .survey-sub   { font-size: 0.85rem; color: #8a9bb0; margin-bottom: 20px; }
 .style-card { border-radius: 16px; padding: 18px 20px; margin-bottom: 4px; }
 .style-name { font-weight: 700; font-size: 1rem; color: #2c3e50; }
 .style-desc { font-size: 0.82rem; color: #6b7280; margin-top: 2px; }
-
-/* ── 채팅 웰컴 카드 ── */
 .welcome-card {
     background: #ffffff; border: 1px solid #e8edf2; border-radius: 16px;
     padding: 20px 24px; margin: 16px 0 24px 0; color: #4a5568; font-size: 0.92rem; line-height: 1.7;
-    animation: scaleIn 0.5s cubic-bezier(0.22,1,0.36,1) 0.1s both;
-    opacity: 0; animation-fill-mode: forwards;
+    animation: scaleIn 0.5s cubic-bezier(0.22,1,0.36,1) 0.1s both; opacity: 0; animation-fill-mode: forwards;
 }
 .welcome-card b { color: #2c7be5; }
+
+/* ── 요약 확인 카드 ── */
+.summary-card {
+    background: linear-gradient(135deg, #f0f9ff 0%, #f0fdf4 100%);
+    border: 1.5px solid #7dd3fc;
+    border-radius: 20px;
+    padding: 24px 28px;
+    margin: 12px 0 20px 0;
+    animation: scaleIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+}
+.summary-card-title {
+    font-size: 1rem; font-weight: 700; color: #0369a1; margin-bottom: 14px;
+}
+.summary-row {
+    display: flex; gap: 10px; margin: 8px 0; align-items: flex-start;
+    font-size: 0.9rem; color: #334155; line-height: 1.6;
+}
+.summary-label {
+    font-size: 0.75rem; font-weight: 700; color: #0284c7;
+    background: #e0f2fe; border-radius: 6px; padding: 2px 7px;
+    min-width: 44px; text-align: center; margin-top: 2px; flex-shrink: 0;
+}
+.summary-quote {
+    background: #ffffff; border-left: 3px solid #7dd3fc;
+    border-radius: 0 10px 10px 0; padding: 10px 14px;
+    margin: 10px 0 16px 0; font-size: 0.9rem; color: #475569;
+    line-height: 1.7; font-style: italic;
+}
+.phase-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.75rem; font-weight: 600; padding: 3px 10px;
+    border-radius: 20px; margin-bottom: 8px;
+}
+.phase-collecting { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+.phase-reframing  { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
 </style>
 """
 
@@ -214,14 +253,17 @@ def apply_styles() -> None:
 
 def init_session() -> None:
     defaults = {
-        "intro_done":   False,
-        "survey_done":  False,
-        "style_chosen": False,
-        "messages":     [],
-        "user_gender":  None,
-        "user_age":     None,
-        "user_mood":    None,
-        "chat_style":   None,
+        "intro_done":      False,
+        "survey_done":     False,
+        "style_chosen":    False,
+        "messages":        [],
+        "user_gender":     None,
+        "user_age":        None,
+        "user_mood":       None,
+        "chat_style":      None,
+        # 정보 수집 관련
+        "phase":           "collecting",   # "collecting" | "confirming" | "reframing"
+        "collected_info":  None,           # check_info_sufficient 결과
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -250,17 +292,16 @@ def render_intro() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ── STEP 1 : 설문 ─────────────────────────────────────────────────────────────
 def render_header() -> None:
     st.title("🌱 마음 다시 보기")
     st.caption("생각을 새롭게, 마음을 가볍게")
     st.divider()
 
 
+# ── STEP 1 : 설문 ─────────────────────────────────────────────────────────────
 def render_survey() -> None:
     st.markdown(
-        '<div class="page-enter">'
-        '<div class="stagger-1 survey-card">'
+        '<div class="page-enter"><div class="stagger-1 survey-card">'
         '<div class="survey-title">시작하기 전에 간단히 알려주세요 👋</div>'
         '<div class="survey-sub">입력하신 정보는 더 잘 도와드리기 위해서만 사용돼요.</div>'
         '</div></div>',
@@ -292,14 +333,13 @@ def render_survey() -> None:
 # ── STEP 2 : 스타일 선택 ─────────────────────────────────────────────────────
 def render_style_select() -> None:
     st.markdown(
-        '<div class="page-enter">'
-        '<div class="stagger-1 survey-card">'
+        '<div class="page-enter"><div class="stagger-1 survey-card">'
         '<div class="survey-title">어떤 스타일로 대화할까요? 💬</div>'
         '<div class="survey-sub">나와 잘 맞는 대화 스타일을 골라보세요.</div>'
         '</div></div>',
         unsafe_allow_html=True,
     )
-    keys = list(STYLES.keys())
+    keys    = list(STYLES.keys())
     stagger = ["stagger-2", "stagger-3", "stagger-2", "stagger-3"]
     for i, row in enumerate([keys[:2], keys[2:]]):
         cols = st.columns(2)
@@ -309,10 +349,8 @@ def render_style_select() -> None:
             sc = stagger[i * 2 + j]
             with col:
                 st.markdown(
-                    f'<div class="page-enter">'
-                    f'<div class="{sc} style-card" style="background:{bg};border:1.5px solid {bdr};">'
-                    f'<div class="style-name">{lbl}</div>'
-                    f'<div class="style-desc">{dsc}</div>'
+                    f'<div class="page-enter"><div class="{sc} style-card" style="background:{bg};border:1.5px solid {bdr};">'
+                    f'<div class="style-name">{lbl}</div><div class="style-desc">{dsc}</div>'
                     f'</div></div>',
                     unsafe_allow_html=True,
                 )
@@ -323,6 +361,28 @@ def render_style_select() -> None:
 
 
 # ── STEP 3 : 채팅 ─────────────────────────────────────────────────────────────
+def _get_api_key() -> str:
+    try:
+        return st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        return ""
+
+
+def _phase_badge() -> None:
+    """현재 단계 뱃지 표시."""
+    phase = st.session_state.get("phase", "collecting")
+    if phase == "collecting":
+        st.markdown(
+            "<div class='phase-badge phase-collecting'>🔍 정보 수집 중</div>",
+            unsafe_allow_html=True,
+        )
+    elif phase == "reframing":
+        st.markdown(
+            "<div class='phase-badge phase-reframing'>✨ 인지 재구조화 중</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def render_history() -> None:
     if not st.session_state.messages:
         style = STYLES[st.session_state.chat_style]
@@ -333,22 +393,108 @@ def render_history() -> None:
             f"<div class='welcome-card' style='border-color:{bdr};'>"
             f"{av} <b>{lbl}</b> 스타일로 대화를 시작할게요!<br><br>"
             f"오늘 기분이 <b>{mood}점</b>이군요 {emoji}&nbsp;"
-            f"편하게 이야기해 주세요. 판단 없이 들을게요. 🤍"
+            f"어떤 일이 있었는지 편하게 이야기해 주세요. 판단 없이 들을게요. 🤍"
             f"</div>",
             unsafe_allow_html=True,
         )
+
+    _phase_badge()
+
     for msg in st.session_state.messages:
         avatar = "🧑" if msg["role"] == "user" else STYLES[st.session_state.chat_style]["avatar"]
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
 
+def render_summary_confirm(info: dict) -> None:
+    """수집된 정보를 카드로 보여주고 확인/수정 버튼 표시."""
+    situation = info.get("situation", "")
+    thought   = info.get("thought", "")
+    emotion   = info.get("emotion", "")
+    intensity = info.get("intensity", "")
+    summary   = info.get("summary", "")
+
+    st.markdown(
+        '<div class="summary-card">'
+        '<div class="summary-card-title">📋 지금까지 들은 내용을 정리해볼게요</div>'
+        f'<div class="summary-row"><span class="summary-label">상황</span><span>{situation}</span></div>'
+        f'<div class="summary-row"><span class="summary-label">생각</span><span>{thought}</span></div>'
+        f'<div class="summary-row"><span class="summary-label">감정</span><span>{emotion} ({intensity})</span></div>'
+        f'<div class="summary-quote">"{summary}"</div>'
+        '<div style="font-size:0.88rem;color:#475569;margin-top:4px;">이 내용이 맞나요?</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("✅ 맞아요, 계속할게요", type="primary", use_container_width=True, key="confirm_yes"):
+            st.session_state.phase          = "reframing"
+            st.session_state.collected_info = info
+            # 챗봇이 재구조화 시작 메시지를 보내도록 트리거
+            _start_reframing()
+    with col2:
+        if st.button("✏️ 조금 달라요", use_container_width=True, key="confirm_no"):
+            st.session_state.phase          = "collecting"
+            st.session_state.collected_info = None
+            # 수정 안내 메시지
+            st.session_state.messages.append({
+                "role":    "assistant",
+                "content": "그렇군요! 어떤 부분이 다른지 조금 더 이야기해 주실 수 있나요? 😊",
+            })
+            st.rerun()
+
+
+def _start_reframing() -> None:
+    """재구조화 시작 시 챗봇 첫 메시지 생성."""
+    api_key = _get_api_key()
+    if not api_key:
+        st.rerun()
+        return
+
+    style = STYLES[st.session_state.chat_style]
+    info  = st.session_state.collected_info
+    system = (
+        style["prompt"] + REFRAMING_SUFFIX
+        + f"\n\n[파악된 사용자 정보]\n"
+        f"상황: {info.get('situation')}\n"
+        f"생각: {info.get('thought')}\n"
+        f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
+        f"성별: {st.session_state.user_gender}, 나이: {st.session_state.user_age}세\n"
+        + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
+    )
+
+    client   = __import__("openai").OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system},
+            *st.session_state.messages,
+            {"role": "user", "content": "[정보 확인 완료. 인지 재구조화를 시작해줘.]"},
+        ],
+        temperature=0.7,
+        max_tokens=600,
+    )
+    reply = response.choices[0].message.content
+    st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.rerun()
+
+
 def render_chat_input(config: SidebarConfig) -> None:
-    if prompt := st.chat_input("오늘 어떤 생각이 드나요?"):
-        try:
-            api_key = st.secrets["OPENAI_API_KEY"]
-        except Exception:
-            api_key = ""
+    phase = st.session_state.get("phase", "collecting")
+
+    # ── 확인 단계: 입력창 대신 확인 카드 ────────────────────────────────────
+    if phase == "confirming":
+        render_summary_confirm(st.session_state.get("collected_info", {}))
+        return
+
+    placeholder_text = (
+        "오늘 어떤 일이 있었나요?" if phase == "collecting"
+        else "자유롭게 이야기해 주세요"
+    )
+
+    if prompt := st.chat_input(placeholder_text):
+        api_key = _get_api_key()
         if not api_key:
             st.error("⚠️ `.streamlit/secrets.toml`에 OPENAI_API_KEY를 설정해주세요.")
             st.stop()
@@ -357,12 +503,24 @@ def render_chat_input(config: SidebarConfig) -> None:
         with st.chat_message("user", avatar="🧑"):
             st.markdown(prompt)
 
-        style = STYLES[st.session_state.chat_style]
-        enriched_system = (
-            style["prompt"]
-            + f"\n\n[사용자 정보] 성별: {st.session_state.user_gender}, "
-            f"나이: {st.session_state.user_age}세, "
-            f"오늘 기분 점수: {st.session_state.user_mood}/10"
+        style  = STYLES[st.session_state.chat_style]
+        suffix = INFO_GATHERING_SUFFIX if phase == "collecting" else REFRAMING_SUFFIX
+
+        # 재구조화 단계면 수집된 정보도 함께 전달
+        extra = ""
+        if phase == "reframing" and st.session_state.collected_info:
+            info  = st.session_state.collected_info
+            extra = (
+                f"\n\n[파악된 사용자 정보]\n"
+                f"상황: {info.get('situation')}\n"
+                f"생각: {info.get('thought')}\n"
+                f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
+            )
+
+        system = (
+            style["prompt"] + suffix + extra
+            + f"\n\n[사용자 기본 정보] 성별: {st.session_state.user_gender}, "
+            f"나이: {st.session_state.user_age}세, 기분 점수: {st.session_state.user_mood}/10"
             + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
         )
 
@@ -373,7 +531,7 @@ def render_chat_input(config: SidebarConfig) -> None:
                 for chunk in stream_chat(
                     api_key=api_key,
                     messages=st.session_state.messages,
-                    system_prompt=enriched_system,
+                    system_prompt=system,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 ):
@@ -381,10 +539,18 @@ def render_chat_input(config: SidebarConfig) -> None:
                     placeholder.markdown(full_response + "▌")
                 placeholder.markdown(full_response)
             except Exception as e:
-                st.error(f"❌ 오류가 발생했어요: {e}")
+                st.error(f"❌ 오류: {e}")
                 st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+        # ── 정보 수집 단계일 때만 충분성 체크 ──────────────────────────────
+        if phase == "collecting":
+            result = check_info_sufficient(api_key, st.session_state.messages)
+            if result.get("sufficient"):
+                st.session_state.phase          = "confirming"
+                st.session_state.collected_info = result
+                st.rerun()
 
 
 def render_main(config: SidebarConfig) -> None:
