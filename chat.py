@@ -84,12 +84,37 @@ textarea[data-testid="stChatInput"] {
 h1 { font-size: 1.5rem !important; font-weight: 700 !important; color: #2c3e50 !important; }
 hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 
+/* ── 공통 페이지 전환 애니메이션 ── */
+@keyframes pageEnter {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pageEnterLeft {
+    from { opacity: 0; transform: translateX(-20px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(18px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes fadeInSlow { 0% { opacity: 0; } 40% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95) translateY(12px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
 
+/* 모든 화면 전환에 적용되는 래퍼 */
+.page-enter {
+    animation: pageEnter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 카드들을 순서대로 등장시키는 stagger */
+.page-enter .stagger-1 { animation: pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) 0.05s both; opacity: 0; animation-fill-mode: forwards; }
+.page-enter .stagger-2 { animation: pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) 0.15s both; opacity: 0; animation-fill-mode: forwards; }
+.page-enter .stagger-3 { animation: pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) 0.25s both; opacity: 0; animation-fill-mode: forwards; }
+.page-enter .stagger-4 { animation: pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) 0.35s both; opacity: 0; animation-fill-mode: forwards; }
+.page-enter .stagger-btn { animation: scaleIn 0.4s cubic-bezier(0.22,1,0.36,1) 0.45s both; opacity: 0; animation-fill-mode: forwards; }
+
+/* ── 인트로 전용 ── */
 .intro-wrap {
     display: flex; flex-direction: column; align-items: center;
     justify-content: center; min-height: 28vh; text-align: center; padding: 40px 20px 16px;
@@ -116,6 +141,13 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     animation: fadeIn 1s ease both; animation-delay: 1.6s;
     opacity: 0; animation-fill-mode: forwards;
 }
+.intro-btn-wrap {
+    animation: fadeIn 1s ease both; animation-delay: 2.4s;
+    opacity: 0; animation-fill-mode: forwards;
+    margin-top: 8px; width: 100%; max-width: 280px;
+}
+
+/* ── 안내 카드 ── */
 .notice-card {
     background: #ffffff; border: 1px solid #e8edf2; border-radius: 16px;
     padding: 18px 22px; margin-bottom: 10px;
@@ -130,20 +162,21 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     font-size: 0.86rem; color: #92400e; line-height: 1.75; text-align: left;
 }
 .notice-warn b { color: #b45309; }
-.intro-btn-wrap {
-    animation: fadeIn 1s ease both; animation-delay: 2.4s;
-    opacity: 0; animation-fill-mode: forwards;
-    margin-top: 8px; width: 100%; max-width: 280px;
-}
+
+/* ── 설문·스타일 카드 ── */
 .survey-card { background: #ffffff; border: 1px solid #e8edf2; border-radius: 20px; padding: 28px 32px; margin: 8px 0 24px 0; }
 .survey-title { font-size: 1.05rem; font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
 .survey-sub   { font-size: 0.85rem; color: #8a9bb0; margin-bottom: 20px; }
 .style-card { border-radius: 16px; padding: 18px 20px; margin-bottom: 4px; }
 .style-name { font-weight: 700; font-size: 1rem; color: #2c3e50; }
 .style-desc { font-size: 0.82rem; color: #6b7280; margin-top: 2px; }
+
+/* ── 채팅 웰컴 카드 ── */
 .welcome-card {
     background: #ffffff; border: 1px solid #e8edf2; border-radius: 16px;
     padding: 20px 24px; margin: 16px 0 24px 0; color: #4a5568; font-size: 0.92rem; line-height: 1.7;
+    animation: scaleIn 0.5s cubic-bezier(0.22,1,0.36,1) 0.1s both;
+    opacity: 0; animation-fill-mode: forwards;
 }
 .welcome-card b { color: #2c7be5; }
 </style>
@@ -195,6 +228,7 @@ def init_session() -> None:
             st.session_state[key] = val
 
 
+# ── STEP 0 : 인트로 ───────────────────────────────────────────────────────────
 def render_intro() -> None:
     st.markdown(
         '<div class="intro-wrap">'
@@ -216,6 +250,7 @@ def render_intro() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
+# ── STEP 1 : 설문 ─────────────────────────────────────────────────────────────
 def render_header() -> None:
     st.title("🌱 마음 다시 보기")
     st.caption("생각을 새롭게, 마음을 가볍게")
@@ -224,10 +259,11 @@ def render_header() -> None:
 
 def render_survey() -> None:
     st.markdown(
-        '<div class="survey-card">'
+        '<div class="page-enter">'
+        '<div class="stagger-1 survey-card">'
         '<div class="survey-title">시작하기 전에 간단히 알려주세요 👋</div>'
         '<div class="survey-sub">입력하신 정보는 더 잘 도와드리기 위해서만 사용돼요.</div>'
-        '</div>',
+        '</div></div>',
         unsafe_allow_html=True,
     )
     col1, col2 = st.columns(2)
@@ -240,8 +276,8 @@ def render_survey() -> None:
     mood = st.slider("지금 기분이 어때요?  (0 = 매우 나쁨 · 10 = 매우 좋음)",
                      min_value=0, max_value=10, value=5, step=1)
     st.markdown(
-        f"<div style='text-align:center;font-size:2.2rem;margin:-8px 0 16px 0;'>"
-        f"{MOOD_EMOJIS[mood]}</div>",
+        f"<div style='text-align:center;font-size:2.2rem;margin:-8px 0 16px 0;"
+        f"animation:pageEnter 0.4s ease both;'>{MOOD_EMOJIS[mood]}</div>",
         unsafe_allow_html=True,
     )
     st.markdown("<br>", unsafe_allow_html=True)
@@ -253,26 +289,31 @@ def render_survey() -> None:
         st.rerun()
 
 
+# ── STEP 2 : 스타일 선택 ─────────────────────────────────────────────────────
 def render_style_select() -> None:
     st.markdown(
-        '<div class="survey-card">'
+        '<div class="page-enter">'
+        '<div class="stagger-1 survey-card">'
         '<div class="survey-title">어떤 스타일로 대화할까요? 💬</div>'
         '<div class="survey-sub">나와 잘 맞는 대화 스타일을 골라보세요.</div>'
-        '</div>',
+        '</div></div>',
         unsafe_allow_html=True,
     )
     keys = list(STYLES.keys())
-    for row in [keys[:2], keys[2:]]:
+    stagger = ["stagger-2", "stagger-3", "stagger-2", "stagger-3"]
+    for i, row in enumerate([keys[:2], keys[2:]]):
         cols = st.columns(2)
-        for col, key in zip(cols, row):
+        for j, (col, key) in enumerate(zip(cols, row)):
             s = STYLES[key]
             bg, bdr, lbl, dsc = s["color"], s["border"], s["label"], s["desc"]
+            sc = stagger[i * 2 + j]
             with col:
                 st.markdown(
-                    f"<div class='style-card' style='background:{bg};border:1.5px solid {bdr};'>"
-                    f"<div class='style-name'>{lbl}</div>"
-                    f"<div class='style-desc'>{dsc}</div>"
-                    f"</div>",
+                    f'<div class="page-enter">'
+                    f'<div class="{sc} style-card" style="background:{bg};border:1.5px solid {bdr};">'
+                    f'<div class="style-name">{lbl}</div>'
+                    f'<div class="style-desc">{dsc}</div>'
+                    f'</div></div>',
                     unsafe_allow_html=True,
                 )
                 if st.button("선택", key=f"style_{key}", use_container_width=True):
@@ -281,6 +322,7 @@ def render_style_select() -> None:
                     st.rerun()
 
 
+# ── STEP 3 : 채팅 ─────────────────────────────────────────────────────────────
 def render_history() -> None:
     if not st.session_state.messages:
         style = STYLES[st.session_state.chat_style]
