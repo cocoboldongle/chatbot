@@ -1,8 +1,82 @@
 """
 sidebar.py — 사이드바 렌더링
 """
+import json
+import datetime
 import streamlit as st
 from dataclasses import dataclass
+
+STYLE_LABELS = {
+    "detective": "🔍 분석적 탐정형",
+    "friend":    "🤗 따뜻한 친구형",
+    "sibling":   "😎 쿨한 형·누나형",
+    "coach":     "🧘 차분한 코치형",
+}
+
+MOOD_EMOJIS = ["😭","😢","😟","😕","😐","🙂","😊","😄","😁","🤩","🥳"]
+
+SIDEBAR_CSS = """
+<style>
+/* 프로필 카드 */
+.profile-card {
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+    color: #334155;
+    line-height: 1.8;
+}
+.profile-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 0;
+}
+.profile-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    min-width: 36px;
+}
+.profile-value {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.85rem;
+}
+
+/* 스타일 배지 */
+.style-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #ffffff;
+    border: 1.5px solid #c7d2fe;
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #3730a3;
+    margin-bottom: 4px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* 다운로드 버튼 커스텀 */
+.stDownloadButton > button {
+    width: 100%;
+    background-color: #f8fafc !important;
+    color: #334155 !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    font-size: 0.85rem !important;
+}
+.stDownloadButton > button:hover {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+}
+</style>
+"""
 
 
 @dataclass
@@ -13,15 +87,51 @@ class SidebarConfig:
     system_prompt: str
 
 
+def _build_txt(messages: list, profile: dict) -> str:
+    """대화 내용을 텍스트로 변환."""
+    now   = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    lines = [
+        "═══════════════════════════════════",
+        "       🌱 마음 다시 보기 — 대화 기록",
+        "═══════════════════════════════════",
+        f"저장 일시  : {now}",
+        f"성별       : {profile.get('gender', '-')}",
+        f"나이       : {profile.get('age', '-')}세",
+        f"기분 점수  : {profile.get('mood', '-')}/10",
+        f"대화 스타일: {profile.get('style_label', '-')}",
+        "───────────────────────────────────",
+        "",
+    ]
+    for msg in messages:
+        role  = "나" if msg["role"] == "user" else "챗봇"
+        lines.append(f"[{role}]")
+        lines.append(msg["content"])
+        lines.append("")
+    lines.append("═══════════════════════════════════")
+    return "\n".join(lines)
+
+
+def _build_json(messages: list, profile: dict) -> str:
+    """대화 내용을 JSON으로 변환."""
+    data = {
+        "exported_at": datetime.datetime.now().isoformat(),
+        "profile": profile,
+        "messages": messages,
+    }
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
 def render_sidebar() -> SidebarConfig:
     temperature = 0.7
     max_tokens  = 800
 
     with st.sidebar:
+        st.markdown(SIDEBAR_CSS, unsafe_allow_html=True)
         st.markdown("### 🌱 마음 다시 보기")
         st.caption("인지 재구조화 챗봇")
         st.divider()
 
+        # ── API 키 ──────────────────────────────────────────────
         api_key_input = st.text_input(
             "OpenAI API Key",
             type="password",
@@ -29,20 +139,79 @@ def render_sidebar() -> SidebarConfig:
             help="secrets.toml에 설정하거나 여기에 입력하세요.",
         )
 
+        # ── 사용자 프로필 (설문 완료 후 표시) ──────────────────
+        if st.session_state.get("survey_done"):
+            st.divider()
+            gender     = st.session_state.get("user_gender", "-")
+            age        = st.session_state.get("user_age", "-")
+            mood       = st.session_state.get("user_mood", 5)
+            mood_emoji = MOOD_EMOJIS[int(mood)] if isinstance(mood, (int, float)) else "😐"
+
+            st.markdown(
+                f"<div class='profile-card'>"
+                f"<div class='profile-row'><span class='profile-label'>성별</span>"
+                f"<span class='profile-value'>{gender}</span></div>"
+                f"<div class='profile-row'><span class='profile-label'>나이</span>"
+                f"<span class='profile-value'>{age}세</span></div>"
+                f"<div class='profile-row'><span class='profile-label'>기분</span>"
+                f"<span class='profile-value'>{mood_emoji} {mood}점</span></div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── 현재 대화 스타일 (스타일 선택 후 표시) ────────────
+        if st.session_state.get("style_chosen"):
+            style_key   = st.session_state.get("chat_style", "")
+            style_label = STYLE_LABELS.get(style_key, "")
+            st.markdown(
+                f"<div class='style-badge'>{style_label}</div>",
+                unsafe_allow_html=True,
+            )
+
         st.divider()
 
+        # ── 고급 설정 ────────────────────────────────────────────
         with st.expander("⚙️ 고급 설정", expanded=False):
             temperature = st.slider("창의성 (Temperature)", 0.0, 1.5, 0.7, 0.1)
             max_tokens  = st.slider("최대 응답 길이", 256, 2048, 800, 128)
 
         st.divider()
 
-        # 대화 초기화 (채팅 기록만 리셋)
+        # ── 대화 다운로드 (메시지가 있을 때만) ─────────────────
+        messages = st.session_state.get("messages", [])
+        if messages:
+            profile = {
+                "gender":      st.session_state.get("user_gender", "-"),
+                "age":         st.session_state.get("user_age", "-"),
+                "mood":        st.session_state.get("user_mood", "-"),
+                "style_label": STYLE_LABELS.get(st.session_state.get("chat_style", ""), "-"),
+            }
+            fname = datetime.datetime.now().strftime("마음다시보기_%Y%m%d_%H%M")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="📄 TXT",
+                    data=_build_txt(messages, profile),
+                    file_name=f"{fname}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+            with col2:
+                st.download_button(
+                    label="🗂 JSON",
+                    data=_build_json(messages, profile),
+                    file_name=f"{fname}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            st.divider()
+
+        # ── 액션 버튼들 ─────────────────────────────────────────
         if st.button("🗑️ 대화 초기화", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 
-        # 스타일 재선택 — 스타일이 선택된 상태일 때만 표시
         if st.session_state.get("style_chosen"):
             if st.button("🎭 스타일 바꾸기", use_container_width=True):
                 st.session_state.messages     = []
@@ -50,13 +219,15 @@ def render_sidebar() -> SidebarConfig:
                 st.session_state.chat_style   = None
                 st.rerun()
 
-        # 처음으로 — 인트로부터 전체 재시작
         if st.session_state.get("intro_done"):
             if st.button("🏠 처음으로", use_container_width=True):
-                for key in ["intro_done","survey_done","style_chosen",
-                            "messages","user_gender","user_age","user_mood","chat_style"]:
-                    st.session_state[key] = ([] if key == "messages" else
-                                             False if key in ["intro_done","survey_done","style_chosen"] else None)
+                for key in ["intro_done", "survey_done", "style_chosen",
+                            "messages", "user_gender", "user_age", "user_mood", "chat_style"]:
+                    st.session_state[key] = (
+                        []    if key == "messages" else
+                        False if key in ["intro_done", "survey_done", "style_chosen"] else
+                        None
+                    )
                 st.rerun()
 
         st.divider()
@@ -72,5 +243,5 @@ def render_sidebar() -> SidebarConfig:
         api_key_input=api_key_input,
         temperature=temperature,
         max_tokens=max_tokens,
-        system_prompt="",  # chat.py의 STYLES 프롬프트가 실제로 사용됨
+        system_prompt="",
     )
