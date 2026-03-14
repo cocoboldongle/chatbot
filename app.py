@@ -12,8 +12,8 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import streamlit as st
-from ui.sidebar import render_sidebar
-from ui.chat import apply_styles, render_header, init_session, render_history, render_chat_input
+from sidebar import render_sidebar
+from chat import apply_styles, render_header, init_session, render_history, render_chat_input
 
 # ── 페이지 기본 설정 (반드시 최상단) ─────────────────────────────────────────
 st.set_page_config(
