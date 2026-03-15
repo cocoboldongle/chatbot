@@ -3,7 +3,7 @@ chat.py — 채팅 화면 렌더링
 흐름: 인트로 → 설문 → 스타일 선택 → 정보수집 채팅 → 요약 확인 → 인지 재구조화
 """
 import streamlit as st
-from llm import stream_chat, check_info_sufficient
+from llm import stream_chat, check_info_sufficient, extract_distortions
 from sidebar import SidebarConfig
 
 STYLES = {
@@ -100,32 +100,34 @@ REFRAMING_SUFFIX = """
 DISTORTION_SUFFIX = """
 
 [현재 단계: 인지왜곡 탐색]
-사용자의 생각 속에 어떤 패턴이 있는지 함께 자연스럽게 탐색하는 단계야.
+사용자의 마음 속 부정적인 생각 패턴을 함께 자연스럽게 탐색하는 단계야.
 
-탐색해야 할 5가지 (대화 흐름 속에서 자연스럽게):
-  1. 자동적 사고  — 그 순간 가장 먼저 떠오른 생각이 뭔지
+탐색해야 할 4가지 (대화 흐름 속에서 자연스럽게):
+  1. 자동적 사고  — 그 순간 가장 먼저 떠오른 부정적인 생각이 뭔지
   2. 반복 패턴    — 이런 생각이 자주 반복되는지, 비슷한 상황에서도 그런지
-  3. 극단성       — "항상", "절대", "완전히", "다" 같은 표현을 쓰는지
-  4. 증거         — 그 생각을 뒷받침하는 근거가 실제로 있는지
-  5. 다른 관점    — 같은 상황을 다르게 볼 가능성이 있는지 인식하는지
+  3. 극단성       — "항상", "절대", "완전히", "다", "절대" 같은 표현을 쓰는지
+  4. 증거         — 그 생각을 뒷받침하는 실제 근거가 있는지, 아니면 느낌인지
 
-주요 인지왜곡 유형 (참고용):
-  - 흑백논리: "완전 성공 아니면 완전 실패"처럼 극단적으로 생각함
-  - 과잉일반화: 한 번 있었던 일로 "항상 이래", "다 그래"라고 생각함
-  - 마음읽기: 상대방이 무슨 생각인지 확인도 없이 단정지음
-  - 재앙화: "이러면 다 끝이야"처럼 최악의 결과만 상상함
-  - 개인화: 내 탓이 아닌 일도 "다 내 잘못"이라고 받아들임
-  - 감정적 추론: 기분이 나쁘면 "분명 뭔가 잘못된 거야"라고 느낌
+인지왜곡 유형 참고 (탐색 시 활용):
+  - 흑백 사고: "1등 아니면 패배자" 처럼 중간이 없는 극단적 판단
+  - 과잉 일반화: 한 번 일어난 일을 "항상 그래"로 확대
+  - 부정적 편향: 좋은 건 안 보고 나쁜 것만 집중
+  - 긍정 축소화: 잘한 건 "별거 아니야", "운이었어"로 무시
+  - 성급한 판단: 증거 없이 "저 사람은 나를 싫어해"로 단정
+  - 확대와 축소: 작은 실수를 "다 망했어", "인생 끝"으로 과장
+  - 감정적 추론: "불안하니까 나쁜 일 생길 거야"처럼 느낌을 사실로 믿음
+  - 해야 한다 진술: "나는 항상 잘해야 해"처럼 비현실적 기준
+  - 낙인찍기: "나는 바보야", "나는 실패자야"처럼 자신을 규정
+  - 개인화: "엄마가 화난 건 다 내 탓이야"처럼 모든 걸 자기 책임으로
 
 대화 원칙:
-  - 5가지를 순서대로 억지로 물어보지 마. 대화 흐름에서 자연스럽게 녹여내.
+  - 4가지를 순서대로 캐묻지 마. 대화 흐름에서 자연스럽게 녹여내.
   - 한 번에 하나씩만. 공감 먼저, 탐색은 그 다음.
-  - "혹시 그때 제일 먼저 든 생각이 뭐였어?" 같은 편한 말투로.
-  - 극단적 표현이 나오면 부드럽게 짚어줘. "항상 그런 것 같아? 아니면 이번에 특히 그랬던 건지?"
+  - 구체적인 부정적 마음을 충분히 꺼낼 수 있도록 도와줘.
+  - "항상 그런 것 같아? 아니면 이번에 특히 그랬던 건지?" 처럼 부드럽게.
   - 틀렸다고 지적하는 게 아니라, 함께 살펴보는 느낌으로.
   - 청소년이 쉽게 이해할 수 있는 말로. 어려운 심리 용어 금지.
-  - 탐색이 어느 정도 됐다고 느껴지면, "이제 이 생각을 조금 다른 시각으로 바라볼 수 있을 것 같아요"
-    같은 말로 자연스럽게 재구조화 단계로 넘어갈 준비를 해줘.
+  - 탐색이 충분히 됐다 싶으면, 부드럽게 다음 단계를 준비해줘.
 """
 
 REFRAMING_SUFFIX = """
@@ -264,6 +266,46 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     margin: 10px 0 16px 0; font-size: 0.9rem; color: #475569;
     line-height: 1.7; font-style: italic;
 }
+/* 인지왜곡 결과 카드 */
+.distortion-result {
+    background: #ffffff;
+    border: 1.5px solid #ddd6fe;
+    border-radius: 20px;
+    padding: 22px 26px;
+    margin: 14px 0 20px 0;
+    animation: scaleIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+}
+.distortion-result-title {
+    font-size: 1rem; font-weight: 700; color: #5b21b6; margin-bottom: 14px;
+}
+.distortion-item {
+    background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+    border: 1px solid #e9d5ff;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+.distortion-item:last-child { margin-bottom: 0; }
+.distortion-rank {
+    font-size: 0.72rem; font-weight: 700; color: #7c3aed;
+    background: #ede9fe; border-radius: 6px;
+    padding: 2px 8px; display: inline-block; margin-bottom: 6px;
+}
+.distortion-name {
+    font-size: 0.95rem; font-weight: 700; color: #3b0764; margin-bottom: 4px;
+}
+.distortion-en {
+    font-size: 0.75rem; color: #a78bfa; margin-bottom: 8px;
+}
+.distortion-reason {
+    font-size: 0.86rem; color: #4c1d95; line-height: 1.7; margin-bottom: 6px;
+}
+.distortion-quote {
+    font-size: 0.82rem; color: #7c3aed; background: #ffffff;
+    border-left: 3px solid #a78bfa; border-radius: 0 8px 8px 0;
+    padding: 6px 10px; font-style: italic;
+}
+
 /* 인지왜곡 인트로 카드 */
 .distortion-intro {
     background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
@@ -481,7 +523,7 @@ def render_history() -> None:
 
     for msg in st.session_state.messages:
         # 인지왜곡 인트로 카드는 특수 태그로 저장된 것을 여기서 렌더링
-        if msg.get("role") == "__distortion_intro__":
+        if msg.get("role") in ("__distortion_intro__", "__distortion_result__"):
             st.markdown(msg["content"], unsafe_allow_html=True)
             continue
         avatar = "🧑" if msg["role"] == "user" else STYLES[st.session_state.chat_style]["avatar"]
@@ -563,6 +605,35 @@ DISTORTION_INTRO_HTML = (
     "<div class='distortion-intro'><div class='distortion-intro-title'>🔎 이제 생각 속 패턴을 같이 찾아볼게요</div><div class='distortion-intro-body'>우리가 힘들 때, 머릿속에서 생각이 조금 과장되거나 한쪽으로 치우치는 경우가 있어요.<br>이걸 <b>인지왜곡</b>이라고 하는데, 나쁜 게 아니에요. 누구나 그럴 수 있어요. 😊<br><br>지금부터 아까 나눈 이야기 속에서 혹시 그런 패턴이 있었는지 함께 살펴볼게요.<div class='distortion-intro-example'>예를 들면 이런 것들이에요 👇<br>&#8226; <b>흑백논리</b> &#8212; &#39;이게 안 되면 다 끝이야&#39;<br>&#8226; <b>마음읽기</b> &#8212; &#39;저 사람이 나를 싫어하는 게 분명해&#39;<br>&#8226; <b>과잉일반화</b> &#8212; &#39;나는 항상 이렇게 실패해&#39;</div></div></div>"
 )
 
+def _render_distortion_result_html(distortions: list) -> str:
+    """인지왜곡 결과 카드 HTML 생성."""
+    if not distortions:
+        return ""
+    rank_labels = ["1순위", "2순위", "3순위"]
+    items = ""
+    for i, d in enumerate(distortions[:3]):
+        rank  = rank_labels[i] if i < len(rank_labels) else f"{i+1}순위"
+        name  = d.get("type", "")
+        en    = d.get("english", "")
+        reason= d.get("reason", "")
+        quote = d.get("quote", "")
+        items += (
+            f"<div class='distortion-item'>"
+            f"<div class='distortion-rank'>{rank}</div>"
+            f"<div class='distortion-name'>{name}</div>"
+            f"<div class='distortion-en'>{en}</div>"
+            f"<div class='distortion-reason'>{reason}</div>"
+            + (f"<div class='distortion-quote'>&#34;{quote}&#34;</div>" if quote else "")
+            + "</div>"
+        )
+    return (
+        "<div class='distortion-result'>"
+        "<div class='distortion-result-title'>🧩 발견된 생각 패턴이에요</div>"
+        + items +
+        "</div>"
+    )
+
+
 def _start_distortion() -> None:
     """인지왜곡 탐색 시작 — 인트로 카드를 messages에 저장 후 챗봇 첫 메시지 생성."""
     # 인트로 카드를 대화 기록 맨 아래에 삽입 (특수 role로 구분)
@@ -585,7 +656,19 @@ def _start_distortion() -> None:
 
 
 def _start_reframing() -> None:
-    """재구조화 시작 — 챗봇 첫 메시지 생성."""
+    """재구조화 시작 — 인지왜곡 결과 카드 삽입 후 챗봇 첫 메시지 생성."""
+    # 인지왜곡 추출 후 결과 카드를 messages에 삽입
+    api_key = _get_api_key()
+    if api_key:
+        clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+        distortions = extract_distortions(api_key, clean)
+        if distortions:
+            result_html = _render_distortion_result_html(distortions)
+            st.session_state.messages.append({
+                "role":    "__distortion_result__",
+                "content": result_html,
+            })
+            st.session_state["last_distortions"] = distortions
     style = STYLES[st.session_state.chat_style]
     info  = st.session_state.collected_info
     system = (
