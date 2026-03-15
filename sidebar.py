@@ -202,8 +202,11 @@ def render_sidebar() -> SidebarConfig:
                 ("collecting",  "💬 이야기 들어보기"),
                 ("confirming",  "📋 내용 확인하기"),
                 ("distortion",  "🔎 생각 패턴 찾기"),
+                ("selecting",   "🧩 패턴 선택하기"),
                 ("reframing",   "🌱 새로운 시각 찾기"),
             ]
+            # selecting과 reframing은 같은 순위로 처리
+            phase_for_order = phase if phase != "selecting" else "selecting"
             PHASE_ORDER = [s[0] for s in STEPS]
             current_idx = PHASE_ORDER.index(phase) if phase in PHASE_ORDER else 0
 
