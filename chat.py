@@ -327,7 +327,6 @@ def init_session() -> None:
         # 정보 수집 관련
         "phase":           "collecting",   # "collecting" | "confirming" | "distortion" | "reframing"
         "collected_info":  None,           # check_info_sufficient 결과
-        "distortion_intro_shown": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -470,29 +469,11 @@ def render_history() -> None:
 
     _phase_badge()
 
-    # ── 인지왜곡 단계 첫 진입 시 인트로 카드 ────────────────────────────────
-    phase = st.session_state.get("phase", "collecting")
-    if phase == "distortion" and not st.session_state.get("distortion_intro_shown"):
-        intro_html = (
-            "<div class='distortion-intro'>"
-            "<div class='distortion-intro-title'>🔎 이제 생각 속 패턴을 같이 찾아볼게요</div>"
-            "<div class='distortion-intro-body'>"
-            "우리가 힘들 때, 머릿속에서 생각이 조금 과장되거나 한쪽으로 치우치는 경우가 있어요.<br>"
-            "이걸 <b>인지왜곡</b>이라고 하는데, 나쁜 게 아니에요. 누구나 그럴 수 있어요. 😊<br><br>"
-            "지금부터 아까 나눈 이야기 속에서 혹시 그런 패턴이 있었는지 함께 살펴볼게요."
-            "<div class='distortion-intro-example'>"
-            "예를 들면 이런 것들이에요 👇<br>"
-            "• <b>흑백논리</b> — &#39;이게 안 되면 다 끝이야&#39;<br>"
-            "• <b>마음읽기</b> — &#39;저 사람이 나를 싫어하는 게 분명해&#39;<br>"
-            "• <b>과잉일반화</b> — &#39;나는 항상 이렇게 실패해&#39;"
-            "</div>"
-            "</div>"
-            "</div>"
-        )
-        st.markdown(intro_html, unsafe_allow_html=True)
-        st.session_state["distortion_intro_shown"] = True
-
     for msg in st.session_state.messages:
+        # 인지왜곡 인트로 카드는 특수 태그로 저장된 것을 여기서 렌더링
+        if msg.get("role") == "__distortion_intro__":
+            st.markdown(msg["content"], unsafe_allow_html=True)
+            continue
         avatar = "🧑" if msg["role"] == "user" else STYLES[st.session_state.chat_style]["avatar"]
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
@@ -563,8 +544,17 @@ def _call_gpt_once(system: str, trigger: str, max_tokens: int = 600) -> None:
     st.rerun()
 
 
+DISTORTION_INTRO_HTML = (
+    "<div class='distortion-intro'><div class='distortion-intro-title'>🔎 이제 생각 속 패턴을 같이 찾아볼게요</div><div class='distortion-intro-body'>우리가 힘들 때, 머릿속에서 생각이 조금 과장되거나 한쪽으로 치우치는 경우가 있어요.<br>이걸 <b>인지왜곡</b>이라고 하는데, 나쁜 게 아니에요. 누구나 그럴 수 있어요. 😊<br><br>지금부터 아까 나눈 이야기 속에서 혹시 그런 패턴이 있었는지 함께 살펴볼게요.<div class='distortion-intro-example'>예를 들면 이런 것들이에요 👇<br>&#8226; <b>흑백논리</b> &#8212; &#39;이게 안 되면 다 끝이야&#39;<br>&#8226; <b>마음읽기</b> &#8212; &#39;저 사람이 나를 싫어하는 게 분명해&#39;<br>&#8226; <b>과잉일반화</b> &#8212; &#39;나는 항상 이렇게 실패해&#39;</div></div></div>"
+)
+
 def _start_distortion() -> None:
-    """인지왜곡 탐색 시작 — 인트로 멘트 표시 후 챗봇 첫 메시지 생성."""
+    """인지왜곡 탐색 시작 — 인트로 카드를 messages에 저장 후 챗봇 첫 메시지 생성."""
+    # 인트로 카드를 대화 기록 맨 아래에 삽입 (특수 role로 구분)
+    st.session_state.messages.append({
+        "role":    "__distortion_intro__",
+        "content": DISTORTION_INTRO_HTML,
+    })
     style = STYLES[st.session_state.chat_style]
     info  = st.session_state.collected_info
     system = (
