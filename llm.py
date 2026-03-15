@@ -168,3 +168,55 @@ def extract_distortions(
         return data.get("distortions", [])
     except Exception:
         return []
+
+
+# ── 인지왜곡 탐색 충분성 판단 ─────────────────────────────────────────────────
+
+DISTORTION_SUFFICIENT_PROMPT = """
+너는 인지행동치료 전문가야. 아래 대화를 분석하고 JSON만 반환해. 다른 말은 절대 하지 마.
+
+판단 기준 — 아래 3가지가 모두 파악되면 sufficient: true:
+  1. 자동적 사고: 힘든 순간에 떠오른 구체적인 부정적 생각이 1개 이상 나왔는가
+  2. 반복성/패턴: 이 생각이 반복되는지, 또는 비슷한 상황에서도 그런지 확인되었는가
+  3. 감정/근거: 그 생각이 느낌인지 근거가 있는지 어느 정도 파악되었는가
+
+주의:
+  - 사용자 메시지가 4개 미만이면 무조건 false
+  - 구체적인 부정적 생각이 나오지 않았으면 false
+  - 위 3가지 중 2가지 이상 확인되면 true 가능
+
+반환 형식 (JSON만):
+{"sufficient": true} 또는 {"sufficient": false}
+"""
+
+
+def check_distortion_sufficient(
+    api_key: str,
+    messages: list[dict],
+    model: str = "gpt-4o",
+) -> bool:
+    """
+    인지왜곡 탐색이 충분히 됐는지 판단.
+    사용자 메시지 4개 미만이면 무조건 False.
+    """
+    user_msgs = [m for m in messages if m.get("role") == "user"]
+    if len(user_msgs) < 4:
+        return False
+
+    client   = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": DISTORTION_SUFFICIENT_PROMPT},
+            {"role": "user",   "content": str(messages)},
+        ],
+        temperature=0,
+        max_tokens=50,
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        return json.loads(raw[start:end]).get("sufficient", False)
+    except Exception:
+        return False
