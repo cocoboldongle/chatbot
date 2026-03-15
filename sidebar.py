@@ -117,6 +117,7 @@ class SidebarConfig:
     temperature: float
     max_tokens: int
     system_prompt: str
+    user_direction: str   # 사용자가 원하는 대화 방향
 
 
 def _build_txt(messages: list, profile: dict) -> str:
@@ -233,6 +234,21 @@ def render_sidebar() -> SidebarConfig:
 
         st.divider()
 
+        # ── 원하는 대화 방향 ────────────────────────────────────
+        st.caption("🧭 원하는 대화 방향이 있나요?")
+        ph = "예) 위로보다는 해결책을 찾고 싶어요\n예) 엄마 입장도 이해해보고 싶어요"
+        user_direction = st.text_area(
+            label="direction",
+            label_visibility="collapsed",
+            placeholder=ph,
+            height=100,
+            key="user_direction_input",
+        )
+        if user_direction:
+            st.caption("✅ 입력한 방향이 대화에 반영돼요")
+
+        st.divider()
+
         # ── 고급 설정 ────────────────────────────────────────────
         with st.expander("⚙️ 고급 설정", expanded=False):
             temperature = st.slider("창의성 (Temperature)", 0.0, 1.5, 0.7, 0.1)
@@ -309,4 +325,5 @@ def render_sidebar() -> SidebarConfig:
         temperature=temperature,
         max_tokens=max_tokens,
         system_prompt="",
+        user_direction=user_direction,
     )
