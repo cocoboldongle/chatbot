@@ -941,21 +941,8 @@ def render_chat_input(config: SidebarConfig) -> None:
         else "자유롭게 이야기해 주세요"
     )
 
-    # ── 답변 추천 버튼 ────────────────────────────────────────────────────────
-    suggestions = st.session_state.get("suggestions", [])
-    selected_suggestion = None
-    if suggestions and phase not in ("confirming", "selecting", "done"):
-        st.markdown(
-            "<div class='suggest-label'>💬 이렇게 말하는 친구들도 있어요</div>",
-            unsafe_allow_html=True,
-        )
-        for i, s in enumerate(suggestions):
-            if st.button(s, key=f"suggest_{i}_{hash(s)}", use_container_width=False):
-                selected_suggestion = s
-                st.session_state["suggestions"] = []
-                break
-
-    # 추천 선택 시 해당 텍스트로 입력 처리
+    # ── 추천 선택 여부 확인 ──────────────────────────────────────────────────
+    selected_suggestion = st.session_state.pop("_selected_suggestion", None)
     prompt_to_use = selected_suggestion
 
     if prompt_to_use is None:
