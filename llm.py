@@ -54,7 +54,8 @@ INFO_CHECK_PROMPT = """
   - situation: 상황 한 줄 요약 (없으면 null)
   - thought: 핵심 생각 한 줄 (없으면 null)
   - emotion: 감정 단어 (없으면 null)
-  - intensity: 감정 강도 (없으면 null)
+  - intensity: 감정 강도. 반드시 "약하게", "조금", "꽤", "많이", "매우", "극도로" 중 하나로 표현.
+             사용자가 명시하지 않았더라도 대화 맥락에서 추론해서 반드시 채워줘. null 금지.
   - summary: 2~3문장 공감 요약 (없으면 null)
 
 반환 예시:
