@@ -226,3 +226,65 @@ def check_distortion_sufficient(
         return json.loads(raw[start:end]).get("sufficient", False)
     except Exception:
         return False
+
+
+# ── 재구조화 완료 판단 ─────────────────────────────────────────────────────────
+
+REFRAMING_COMPLETE_PROMPT = """
+너는 인지행동치료 전문가야. 아래 대화를 분석하고 JSON만 반환해. 다른 말은 절대 하지 마.
+
+[판단 목표]
+재구조화 단계 대화에서 사용자의 생각이 긍정적으로 변화했는지 판단해.
+
+sufficient: true 조건 — 아래 중 2가지 이상이 확인돼야 해:
+  1. 사용자가 기존의 부정적 생각에 대해 "그럴 수도 있겠다", "다르게 볼 수도 있겠다" 같은
+     유연한 반응을 보였는가
+  2. 사용자가 스스로 대안적 생각이나 관점을 제시했는가
+     (예: "생각해보면 엄마가 걱정해서 그런 거일 수도 있겠어요")
+  3. 감정적으로 조금 가벼워졌다는 표현이 있는가
+     (예: "그렇게 생각하니까 좀 나은 것 같아요", "덜 억울한 것 같아요")
+  4. 상황에 대한 구체적인 행동 계획이나 작은 변화를 언급했는가
+
+false 조건:
+  - 사용자가 여전히 같은 부정적 생각만 반복하고 있는 경우
+  - 단순히 "네", "모르겠어요" 같은 단답만 있는 경우
+  - 생각의 변화 없이 대화만 이어지는 경우
+  - 재구조화 단계 사용자 메시지가 3개 미만인 경우
+
+반환 형식 (JSON만):
+{"complete": true, "summary": "사용자의 변화를 1~2문장으로 따뜻하게 요약"}
+{"complete": false}
+"""
+
+
+def check_reframing_complete(
+    api_key: str,
+    messages: list[dict],
+    model: str = "gpt-4o",
+) -> dict:
+    """
+    재구조화가 완료됐는지 판단.
+    reframing 단계 사용자 메시지 3개 미만이면 무조건 False.
+    반환: {"complete": bool, "summary": str|None}
+    """
+    user_msgs = [m for m in messages if m.get("role") == "user"]
+    if len(user_msgs) < 3:
+        return {"complete": False}
+
+    client   = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": REFRAMING_COMPLETE_PROMPT},
+            {"role": "user",   "content": str(messages)},
+        ],
+        temperature=0,
+        max_tokens=200,
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        return json.loads(raw[start:end])
+    except Exception:
+        return {"complete": False}
