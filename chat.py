@@ -3,7 +3,7 @@ chat.py — 채팅 화면 렌더링
 흐름: 인트로 → 설문 → 스타일 선택 → 정보수집 채팅 → 요약 확인 → 인지 재구조화
 """
 import streamlit as st
-from llm import stream_chat, check_info_sufficient, extract_distortions
+from llm import stream_chat, check_info_sufficient, extract_distortions, check_distortion_sufficient
 from sidebar import SidebarConfig
 
 STYLES = {
@@ -783,6 +783,13 @@ def render_chat_input(config: SidebarConfig) -> None:
                 st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+        # ── 인지왜곡 탐색 단계: 충분히 파악됐으면 재구조화로 자동 전환 ────────
+        if phase == "distortion":
+            clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+            if check_distortion_sufficient(api_key, clean):
+                st.session_state.phase = "reframing"
+                _start_reframing()
 
 
 def render_main(config: SidebarConfig) -> None:
