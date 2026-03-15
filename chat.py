@@ -713,15 +713,20 @@ def render_chat_input(config: SidebarConfig) -> None:
             result = check_info_sufficient(api_key, clean_messages)
 
             if result.get("sufficient"):
-                # 부정적 사건이 충분히 수집됨 → 요약 카드로 전환
                 st.session_state.phase          = "confirming"
                 st.session_state.collected_info = result
                 st.rerun()
 
             elif result.get("negative") is False:
-                # 긍정적인 대화만 있음 → 챗봇이 자연스럽게 전환 유도
-                # INFO_GATHERING_SUFFIX에 힌트 추가해서 챗봇이 부드럽게 넘어가도록
                 st.session_state["_hint_positive"] = True
+
+        # ── 인지왜곡 탐색 단계: 챗봇 응답 전에 충분성 체크 ──────────────────
+        elif phase == "distortion":
+            clean_messages = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+            if check_distortion_sufficient(api_key, clean_messages):
+                # 충분히 탐색됨 → 결과 카드 + 재구조화로 전환 (챗봇 응답 없이)
+                st.session_state.phase = "reframing"
+                _start_reframing()
 
         style  = STYLES[st.session_state.chat_style]
 
@@ -783,13 +788,6 @@ def render_chat_input(config: SidebarConfig) -> None:
                 st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-        # ── 인지왜곡 탐색 단계: 충분히 파악됐으면 재구조화로 자동 전환 ────────
-        if phase == "distortion":
-            clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-            if check_distortion_sufficient(api_key, clean):
-                st.session_state.phase = "reframing"
-                _start_reframing()
 
 
 def render_main(config: SidebarConfig) -> None:
