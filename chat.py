@@ -383,14 +383,15 @@ def _get_api_key() -> str:
 def _phase_badge() -> None:
     """현재 단계 뱃지 표시."""
     phase = st.session_state.get("phase", "collecting")
+
     if phase == "collecting":
         st.markdown(
-            "<div class='phase-badge phase-collecting'>🔍 정보 수집 중</div>",
+            "<div class='phase-badge phase-collecting'>💬 어떤 일이 있었는지 들어보는 중이에요</div>",
             unsafe_allow_html=True,
         )
     elif phase == "reframing":
         st.markdown(
-            "<div class='phase-badge phase-reframing'>✨ 인지 재구조화 중</div>",
+            "<div class='phase-badge phase-reframing'>🌱 생각을 함께 새롭게 바라보는 중이에요</div>",
             unsafe_allow_html=True,
         )
 
