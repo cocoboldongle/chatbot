@@ -193,6 +193,13 @@ CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
 html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
 .stApp { background-color: #f7f9fc; }
+
+/* 채팅 영역 가로 너비 확장 */
+.block-container {
+    max-width: 860px !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+}
 section[data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e8edf2; }
 [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
     background-color: #e8f4fd; border-radius: 16px; padding: 12px 16px; margin: 6px 0;
