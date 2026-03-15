@@ -182,6 +182,8 @@ REFRAMING_SUFFIX = """
   - 작은 변화도 충분히 인정하고 격려해줘.
   - 청소년이 이해하기 쉬운 말로. 어려운 심리 용어 금지.
   - 재구조화가 어느 정도 이뤄졌다고 느껴지면 따뜻하게 마무리해줘.
+  - 마무리할 때는 절대 질문을 하지 마. 따뜻한 공감과 격려로만 마무리해.
+    예: "정말 잘 생각해냈어요. 그 작은 변화가 큰 차이를 만들 거예요." 처럼.
 """
 
 MOOD_EMOJIS = ["😭", "😢", "😟", "😕", "😐", "🙂", "😊", "😄", "😁", "🤩", "🥳"]
@@ -891,9 +893,10 @@ def _do_start_reframing(selected: dict | None) -> None:
 def render_chat_input(config: SidebarConfig) -> None:
     phase = st.session_state.get("phase", "collecting")
 
-    # ── 완료 단계 ────────────────────────────────────────────────────────────
+    # ── 완료 단계: 입력창은 유지, 완료 카드는 render_history에서 표시 ────────
     if phase == "done":
-        return   # 입력창 숨김 (render_history에서 완료 카드 표시)
+        st.chat_input("자유롭게 이야기해 주세요", disabled=False)
+        return
 
     # ── 확인 단계: 입력창 대신 확인 카드 ────────────────────────────────────
     if phase == "confirming":
