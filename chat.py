@@ -3,7 +3,7 @@ chat.py — 채팅 화면 렌더링
 흐름: 인트로 → 설문 → 스타일 선택 → 정보수집 채팅 → 요약 확인 → 인지 재구조화
 """
 import streamlit as st
-from llm import stream_chat, check_info_sufficient, extract_distortions, check_distortion_sufficient
+from llm import stream_chat, check_info_sufficient, extract_distortions, check_distortion_sufficient, check_reframing_complete
 from sidebar import SidebarConfig
 
 STYLES = {
@@ -310,6 +310,25 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     margin: 10px 0 16px 0; font-size: 0.9rem; color: #475569;
     line-height: 1.7; font-style: italic;
 }
+/* 대화 완료 카드 */
+.complete-card {
+    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+    border: 2px solid #86efac;
+    border-radius: 24px;
+    padding: 28px 30px;
+    margin: 16px 0 24px 0;
+    text-align: center;
+    animation: scaleIn 0.6s cubic-bezier(0.22,1,0.36,1) both;
+}
+.complete-icon { font-size: 2.8rem; margin-bottom: 12px; }
+.complete-title { font-size: 1.1rem; font-weight: 700; color: #15803d; margin-bottom: 10px; }
+.complete-summary {
+    font-size: 0.9rem; color: #166534; line-height: 1.8;
+    background: #ffffff; border-radius: 12px; padding: 14px 18px;
+    margin: 12px 0 16px 0; text-align: left;
+}
+.complete-footer { font-size: 0.82rem; color: #4ade80; margin-top: 8px; }
+
 /* 인지왜곡 선택 카드 */
 .select-card {
     background: #ffffff;
@@ -449,6 +468,8 @@ def init_session() -> None:
         "phase":                    "collecting",   # "collecting" | "confirming" | "distortion" | "selecting" | "reframing"
         "collected_info":           None,           # check_info_sufficient 결과
         "distortion_start_messages": 0,             # distortion 단계 진입 시점의 clean 메시지 수
+        "reframing_start_messages":  0,             # reframing 단계 진입 시점의 clean 메시지 수
+        "phase":                    "collecting",
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -570,6 +591,11 @@ def _phase_badge() -> None:
     elif phase in ("selecting", "reframing"):
         st.markdown(
             "<div class='phase-badge phase-reframing'>🌱 생각을 함께 새롭게 바라보는 중이에요</div>",
+            unsafe_allow_html=True,
+        )
+    elif phase == "done":
+        st.markdown(
+            "<div class='phase-badge phase-reframing'>✅ 오늘 대화를 잘 마무리했어요</div>",
             unsafe_allow_html=True,
         )
 
@@ -818,6 +844,10 @@ DISTORTION_METHOD_MAP = {
 
 def _do_start_reframing(selected: dict | None) -> None:
     """선택된 왜곡을 기반으로 최적 방법을 선택해 재구조화 챗봇 첫 메시지 생성."""
+    # reframing 진입 시점 저장
+    clean_so_far = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+    st.session_state["reframing_start_messages"] = len(clean_so_far)
+
     style = STYLES[st.session_state.chat_style]
     info  = st.session_state.collected_info
 
@@ -860,6 +890,10 @@ def _do_start_reframing(selected: dict | None) -> None:
 
 def render_chat_input(config: SidebarConfig) -> None:
     phase = st.session_state.get("phase", "collecting")
+
+    # ── 완료 단계 ────────────────────────────────────────────────────────────
+    if phase == "done":
+        return   # 입력창 숨김 (render_history에서 완료 카드 표시)
 
     # ── 확인 단계: 입력창 대신 확인 카드 ────────────────────────────────────
     if phase == "confirming":
@@ -978,6 +1012,17 @@ def render_chat_input(config: SidebarConfig) -> None:
                 st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+        # ── 재구조화 단계: 완료 여부 체크 ───────────────────────────────────
+        if phase == "reframing":
+            start_idx = st.session_state.get("reframing_start_messages", 0)
+            all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+            since_reframing = all_clean[start_idx:]
+            result = check_reframing_complete(api_key, since_reframing)
+            if result.get("complete"):
+                st.session_state.phase = "done"
+                st.session_state["reframing_summary"] = result.get("summary", "")
+                st.rerun()
 
 
 def render_main(config: SidebarConfig) -> None:
