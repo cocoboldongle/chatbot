@@ -3,7 +3,7 @@ chat.py — 채팅 화면 렌더링
 흐름: 인트로 → 설문 → 스타일 선택 → 정보수집 채팅 → 요약 확인 → 인지 재구조화
 """
 import streamlit as st
-from llm import stream_chat, check_info_sufficient, extract_distortions, check_distortion_sufficient, check_reframing_complete
+from llm import stream_chat, check_info_sufficient, extract_distortions, check_distortion_sufficient, check_reframing_complete, generate_suggestions
 from sidebar import SidebarConfig
 
 STYLES = {
@@ -312,6 +312,32 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     margin: 10px 0 16px 0; font-size: 0.9rem; color: #475569;
     line-height: 1.7; font-style: italic;
 }
+/* 답변 추천 버튼 */
+.suggest-wrap {
+    margin: 6px 0 14px 0;
+}
+.suggest-label {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    padding-left: 2px;
+}
+.stButton[data-suggest] > button {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 20px !important;
+    font-size: 0.84rem !important;
+    color: #475569 !important;
+    text-align: left !important;
+    padding: 6px 14px !important;
+    transition: all 0.15s !important;
+}
+.stButton[data-suggest] > button:hover {
+    background: #eff6ff !important;
+    border-color: #bfdbfe !important;
+    color: #1d4ed8 !important;
+}
+
 /* 대화 완료 카드 */
 .complete-card {
     background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
@@ -471,6 +497,7 @@ def init_session() -> None:
         "collected_info":           None,           # check_info_sufficient 결과
         "distortion_start_messages": 0,             # distortion 단계 진입 시점의 clean 메시지 수
         "reframing_start_messages":  0,             # reframing 단계 진입 시점의 clean 메시지 수
+        "suggestions":              [],             # 현재 답변 추천 목록
         "phase":                    "collecting",
     }
     for key, val in defaults.items():
@@ -914,13 +941,41 @@ def render_chat_input(config: SidebarConfig) -> None:
         else "자유롭게 이야기해 주세요"
     )
 
-    if prompt := st.chat_input(placeholder_text):
+    # ── 답변 추천 버튼 ────────────────────────────────────────────────────────
+    suggestions = st.session_state.get("suggestions", [])
+    selected_suggestion = None
+    if suggestions and phase not in ("confirming", "selecting", "done"):
+        st.markdown(
+            "<div class='suggest-label'>💬 이렇게 말하는 친구들도 있어요</div>",
+            unsafe_allow_html=True,
+        )
+        for i, s in enumerate(suggestions):
+            if st.button(s, key=f"suggest_{i}_{hash(s)}", use_container_width=False):
+                selected_suggestion = s
+                st.session_state["suggestions"] = []
+                break
+
+    # 추천 선택 시 해당 텍스트로 입력 처리
+    prompt_to_use = selected_suggestion
+
+    if prompt_to_use is None:
+        raw_input = st.chat_input(placeholder_text)
+        if raw_input:
+            prompt_to_use = raw_input
+
+    if prompt_to_use:
+        prompt = prompt_to_use
+    else:
+        return
+
+    if True:
         api_key = _get_api_key()
         if not api_key:
             st.error("⚠️ `.streamlit/secrets.toml`에 OPENAI_API_KEY를 설정해주세요.")
             st.stop()
 
         st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state["suggestions"] = []   # 입력 시 추천 초기화
         with st.chat_message("user", avatar="🧑"):
             st.markdown(prompt)
 
@@ -1015,6 +1070,12 @@ def render_chat_input(config: SidebarConfig) -> None:
                 st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+        # ── 답변 추천 생성 (done 제외 모든 단계) ────────────────────────────
+        if phase != "done":
+            clean_for_suggest = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+            suggestions = generate_suggestions(api_key, clean_for_suggest)
+            st.session_state["suggestions"] = suggestions
 
         # ── 재구조화 단계: 완료 여부 체크 ───────────────────────────────────
         if phase == "reframing":
