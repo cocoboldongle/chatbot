@@ -204,6 +204,7 @@ def check_distortion_sufficient(
     인지왜곡 탐색이 충분히 됐는지 판단.
     distortion 단계의 사용자 메시지 4개 미만이면 무조건 False.
     """
+    # distortion 단계 이후 메시지 기준으로 사용자 메시지 4개 미만이면 False
     user_msgs = [m for m in messages if m.get("role") == "user"]
     if len(user_msgs) < 4:
         return False
