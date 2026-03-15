@@ -421,18 +421,23 @@ def render_history() -> None:
 
 def render_summary_confirm(info: dict) -> None:
     """수집된 정보를 카드로 보여주고 확인/수정 버튼 표시."""
-    situation = info.get("situation", "")
-    thought   = info.get("thought", "")
-    emotion   = info.get("emotion", "")
-    intensity = info.get("intensity", "")
-    summary   = info.get("summary", "")
+    situation = info.get("situation") or ""
+    thought   = info.get("thought")   or ""
+    emotion   = info.get("emotion")   or ""
+    intensity = info.get("intensity") or ""
+    summary   = info.get("summary")   or ""
+
+    # 감정 강도 표시 조합
+    emotion_str = emotion
+    if intensity and str(intensity).lower() not in ("none", "null", ""):
+        emotion_str = f"{emotion} ({intensity})"
 
     st.markdown(
         '<div class="summary-card">'
         '<div class="summary-card-title">📋 지금까지 들은 내용을 정리해볼게요</div>'
         f'<div class="summary-row"><span class="summary-label">상황</span><span>{situation}</span></div>'
         f'<div class="summary-row"><span class="summary-label">생각</span><span>{thought}</span></div>'
-        f'<div class="summary-row"><span class="summary-label">감정</span><span>{emotion} ({intensity})</span></div>'
+        f'<div class="summary-row"><span class="summary-label">감정</span><span>{emotion_str}</span></div>'
         f'<div class="summary-quote">"{summary}"</div>'
         '<div style="font-size:0.88rem;color:#475569;margin-top:4px;">이 내용이 맞나요?</div>'
         '</div>',
