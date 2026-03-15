@@ -62,6 +62,39 @@ SIDEBAR_CSS = """
     box-sizing: border-box;
 }
 
+/* 진행 단계 표시 */
+.progress-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+.progress-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    padding: 5px 8px;
+    border-radius: 8px;
+}
+.progress-step.active {
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+.progress-step.done {
+    color: #86efac;
+}
+.progress-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    flex-shrink: 0;
+}
+.progress-step.active .progress-dot { background: #3b82f6; }
+.progress-step.done  .progress-dot { background: #4ade80; }
+
 /* 다운로드 버튼 커스텀 */
 .stDownloadButton > button {
     width: 100%;
@@ -156,6 +189,43 @@ def render_sidebar() -> SidebarConfig:
             style_label = STYLE_LABELS.get(style_key, "")
             st.markdown(
                 f"<div class='style-badge'>{style_label}</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── 진행 단계 (채팅 시작 후 표시) ──────────────────────
+        phase = st.session_state.get("phase", "")
+        if phase:
+            st.divider()
+            st.caption("진행 단계")
+
+            STEPS = [
+                ("collecting",  "💬 이야기 들어보기"),
+                ("confirming",  "📋 내용 확인하기"),
+                ("distortion",  "🔎 생각 패턴 찾기"),
+                ("reframing",   "🌱 새로운 시각 찾기"),
+            ]
+            PHASE_ORDER = [s[0] for s in STEPS]
+            current_idx = PHASE_ORDER.index(phase) if phase in PHASE_ORDER else 0
+
+            rows = []
+            for i, (key, label) in enumerate(STEPS):
+                if i < current_idx:
+                    cls = "done"
+                    icon = "✓"
+                elif i == current_idx:
+                    cls = "active"
+                    icon = "▶"
+                else:
+                    cls = ""
+                    icon = " "
+                rows.append(
+                    f"<div class='progress-step {cls}'>"
+                    f"<div class='progress-dot'></div>"
+                    f"{icon} {label}"
+                    f"</div>"
+                )
+            st.markdown(
+                "<div class='progress-wrap'>" + "".join(rows) + "</div>",
                 unsafe_allow_html=True,
             )
 
