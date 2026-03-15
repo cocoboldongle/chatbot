@@ -97,3 +97,74 @@ def check_info_sufficient(
         return json.loads(raw[start:end])
     except Exception:
         return {"sufficient": False, "negative": False}
+
+
+# ── 인지왜곡 추출 ──────────────────────────────────────────────────────────────
+
+DISTORTION_EXTRACT_PROMPT = """
+너는 인지행동치료(CBT) 전문가야. 아래 대화를 분석하고 JSON만 반환해. 다른 말은 절대 하지 마.
+
+[인지왜곡 10가지 유형]
+1. 흑백 사고 (All-or-Nothing): "항상", "절대", "완전히" — 중간 없이 극단적 판단
+2. 과잉 일반화 (Overgeneralization): 한 번 일어난 일을 "항상 그래"로 확대
+3. 부정적 편향 (Mental Filter): 좋은 건 무시하고 나쁜 것에만 집중
+4. 긍정 축소화 (Disqualifying the Positive): 잘한 것을 "별거 아니야", "운이었어"로 무시
+5. 성급한 판단 (Jumping to Conclusions): 증거 없이 타인 마음 단정 또는 미래 예측
+6. 확대와 축소 (Magnification/Minimization): 작은 실수를 "다 망했어", "인생 끝"으로 과장
+7. 감정적 추론 (Emotional Reasoning): "불안하니까 나쁜 일 생길 거야" — 느낌을 사실로
+8. 해야 한다 진술 (Should Statements): "나는 항상 잘해야 해" — 비현실적 기준으로 자책
+9. 낙인찍기 (Labeling): "나는 바보야", "나는 실패자야" — 자신/타인을 부정적으로 규정
+10. 개인화 (Personalization): "다 내 탓이야" — 자신과 무관한 일도 자기 책임으로
+
+[분석 지침]
+- 대화 전체에서 사용자의 말을 분석해
+- 가능성이 높은 순서대로 최대 3개 선택
+- 각 왜곡에 대해 청소년이 이해하기 쉬운 설명과 대화에서 발견한 근거를 써줘
+- 없으면 빈 배열 반환
+
+반환 형식 (JSON만, 다른 텍스트 금지):
+{
+  "distortions": [
+    {
+      "type": "왜곡 이름 (한국어)",
+      "english": "영문명",
+      "reason": "왜 이 왜곡이라고 생각하는지 — 대화에서 발견한 근거 (청소년 눈높이로, 1~2문장)",
+      "quote": "사용자가 실제로 한 말 중 이 왜곡이 드러나는 부분 (짧게)"
+    }
+  ]
+}
+"""
+
+
+def extract_distortions(
+    api_key: str,
+    messages: list[dict],
+    model: str = "gpt-4o",
+) -> list[dict]:
+    """
+    대화에서 인지왜곡 유형을 추출.
+    가능성 높은 순으로 최대 3개 반환.
+    반환: [{"type": str, "english": str, "reason": str, "quote": str}, ...]
+    """
+    clean = [m for m in messages if m.get("role") in ("user", "assistant")]
+    if not clean:
+        return []
+
+    client   = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": DISTORTION_EXTRACT_PROMPT},
+            {"role": "user",   "content": str(clean)},
+        ],
+        temperature=0,
+        max_tokens=600,
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        data  = json.loads(raw[start:end])
+        return data.get("distortions", [])
+    except Exception:
+        return []
