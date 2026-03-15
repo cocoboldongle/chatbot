@@ -288,3 +288,54 @@ def check_reframing_complete(
         return json.loads(raw[start:end])
     except Exception:
         return {"complete": False}
+
+
+# ── 답변 추천 생성 ─────────────────────────────────────────────────────────────
+
+SUGGEST_PROMPT = """
+너는 청소년 심리 상담 보조 AI야. JSON만 반환해. 다른 말은 절대 하지 마.
+
+아래 대화에서 마지막 챗봇 질문/말에 대해,
+청소년이 실제로 할 법한 자연스러운 답변 3가지를 만들어줘.
+
+조건:
+  - 각 답변은 서로 다른 감정이나 입장을 반영해야 해 (긍정적/중립적/부정적 또는 다양한 관점)
+  - 10~20자 내외의 짧고 자연스러운 말로 (너무 완벽한 문장 말고, 실제 청소년이 말하듯)
+  - 반말 또는 편한 말투로
+  - 답변이 대화 맥락에 맞아야 해
+
+반환 형식 (JSON만):
+{"suggestions": ["답변1", "답변2", "답변3"]}
+"""
+
+
+def generate_suggestions(
+    api_key: str,
+    messages: list[dict],
+    model: str = "gpt-4o",
+) -> list[str]:
+    """
+    마지막 챗봇 메시지에 대한 답변 추천 3개 생성.
+    마지막 메시지가 assistant가 아니면 빈 리스트 반환.
+    """
+    clean = [m for m in messages if m.get("role") in ("user", "assistant")]
+    if not clean or clean[-1].get("role") != "assistant":
+        return []
+
+    client   = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SUGGEST_PROMPT},
+            {"role": "user",   "content": str(clean[-6:])},  # 최근 6개 메시지만
+        ],
+        temperature=0.9,
+        max_tokens=200,
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        return json.loads(raw[start:end]).get("suggestions", [])
+    except Exception:
+        return []
