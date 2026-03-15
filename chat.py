@@ -519,13 +519,31 @@ def render_chat_input(config: SidebarConfig) -> None:
         # ── 정보 수집 단계: 챗봇 응답 전에 먼저 충분성 체크 ────────────────
         if phase == "collecting":
             result = check_info_sufficient(api_key, st.session_state.messages)
+
             if result.get("sufficient"):
+                # 부정적 사건이 충분히 수집됨 → 요약 카드로 전환
                 st.session_state.phase          = "confirming"
                 st.session_state.collected_info = result
-                st.rerun()   # 챗봇 응답 없이 바로 요약 카드로 전환
+                st.rerun()
+
+            elif result.get("negative") is False:
+                # 긍정적인 대화만 있음 → 챗봇이 자연스럽게 전환 유도
+                # INFO_GATHERING_SUFFIX에 힌트 추가해서 챗봇이 부드럽게 넘어가도록
+                st.session_state["_hint_positive"] = True
 
         style  = STYLES[st.session_state.chat_style]
-        suffix = INFO_GATHERING_SUFFIX if phase == "collecting" else REFRAMING_SUFFIX
+
+        # 긍정 대화 힌트가 있으면 suffix에 전환 유도 문구 추가
+        if phase == "collecting" and st.session_state.pop("_hint_positive", False):
+            suffix = INFO_GATHERING_SUFFIX + """
+
+[추가 지시]
+지금까지 사용자가 즐거웠던 이야기를 해줬어. 충분히 공감하고 기뻐해줘.
+그런 다음, 자연스럽게 "혹시 요즘 힘들거나 속상한 일은 없어?" 같은 식으로
+부드럽게 넘어가봐. 억지스럽지 않게, 대화 흐름에 맞게.
+"""
+        else:
+            suffix = INFO_GATHERING_SUFFIX if phase == "collecting" else REFRAMING_SUFFIX
 
         # 재구조화 단계면 수집된 정보도 함께 전달
         extra = ""
