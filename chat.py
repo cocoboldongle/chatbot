@@ -647,13 +647,43 @@ def render_history() -> None:
     _phase_badge()
 
     for msg in st.session_state.messages:
-        # 인지왜곡 인트로 카드는 특수 태그로 저장된 것을 여기서 렌더링
         if msg.get("role") in ("__distortion_intro__", "__distortion_result__"):
             st.markdown(msg["content"], unsafe_allow_html=True)
             continue
         avatar = "🧑" if msg["role"] == "user" else STYLES[st.session_state.chat_style]["avatar"]
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
+
+    # ── 챗봇 메시지 아래 추천 답변 버튼 (가로 배치) ──────────────────────────
+    phase_now   = st.session_state.get("phase", "collecting")
+    suggestions = st.session_state.get("suggestions", [])
+    if suggestions and phase_now not in ("confirming", "selecting", "done"):
+        st.markdown(
+            "<div class='suggest-label'>💬 이렇게 말하는 친구들도 있어요</div>",
+            unsafe_allow_html=True,
+        )
+        cols = st.columns(len(suggestions))
+        for i, (col, s) in enumerate(zip(cols, suggestions)):
+            with col:
+                if st.button(s, key=f"suggest_{i}_{hash(s)}", use_container_width=True):
+                    st.session_state["_selected_suggestion"] = s
+                    st.session_state["suggestions"] = []
+                    st.rerun()
+
+    # ── 완료 단계: 마무리 카드 표시 ──────────────────────────────────────────
+    if phase_now == "done":
+        summary = st.session_state.get("reframing_summary", "")
+        st.markdown(
+            "<div class='complete-card'>"
+            "<div class='complete-icon'>🌱</div>"
+            "<div class='complete-title'>오늘 정말 잘 해냈어요!</div>"
+            + (f"<div class='complete-summary'>{summary}</div>" if summary else "")
+            + "<div class='complete-footer'>"
+            "힘든 생각을 꺼내고 함께 살펴봐줘서 고마워요. 오늘의 작은 변화가 쌓이면 달라질 거예요. 💚"
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 
 def render_distortion_select() -> None:
