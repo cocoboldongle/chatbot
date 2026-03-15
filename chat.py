@@ -857,6 +857,7 @@ def _start_distortion() -> None:
         f"생각: {info.get('thought')}\n"
         f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
         f"성별: {st.session_state.user_gender}, 나이: {st.session_state.user_age}세\n"
+        + (f"\n\n[사용자가 원하는 대화 방향]\n{st.session_state.get('_user_direction', '')}" if st.session_state.get("_user_direction") else "")
         + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
     )
     _call_gpt_once(system, "[정보 확인 완료. 인지왜곡 탐색을 자연스럽게 시작해줘.]")
@@ -949,12 +950,16 @@ def _do_start_reframing(selected: dict | None) -> None:
         f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
         f"성별: {st.session_state.user_gender}, 나이: {st.session_state.user_age}세\n"
         + selected_info
+        + (f"\n\n[사용자가 원하는 대화 방향]\n{st.session_state.get('_user_direction', '')}" if st.session_state.get("_user_direction") else "")
         + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
     )
     _call_gpt_once(system, trigger_text)
 
 
 def render_chat_input(config: SidebarConfig) -> None:
+    # user_direction을 session_state에 항상 최신으로 저장 (_call_gpt_once에서도 사용)
+    st.session_state["_user_direction"] = getattr(config, "user_direction", "") or ""
+
     phase = st.session_state.get("phase", "collecting")
 
     # ── 완료 단계: 입력창은 유지, 완료 카드는 render_history에서 표시 ────────
@@ -1069,7 +1074,8 @@ def render_chat_input(config: SidebarConfig) -> None:
             style["prompt"] + suffix + extra
             + f"\n\n[사용자 기본 정보] 성별: {st.session_state.user_gender}, "
             f"나이: {st.session_state.user_age}세, 기분 점수: {st.session_state.user_mood}/10"
-            + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
+            + (f"\n\n[사용자가 원하는 대화 방향]\n{st.session_state.get('_user_direction', '')}" if st.session_state.get("_user_direction") else "")
+        + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
         )
 
         with st.chat_message("assistant", avatar=style["avatar"]):
