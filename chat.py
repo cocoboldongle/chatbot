@@ -377,8 +377,9 @@ def init_session() -> None:
         "user_mood":       None,
         "chat_style":      None,
         # 정보 수집 관련
-        "phase":           "collecting",   # "collecting" | "confirming" | "distortion" | "reframing"
-        "collected_info":  None,           # check_info_sufficient 결과
+        "phase":                    "collecting",   # "collecting" | "confirming" | "distortion" | "reframing"
+        "collected_info":           None,           # check_info_sufficient 결과
+        "distortion_start_messages": 0,             # distortion 단계 진입 시점의 clean 메시지 수
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -636,6 +637,10 @@ def _render_distortion_result_html(distortions: list) -> str:
 
 def _start_distortion() -> None:
     """인지왜곡 탐색 시작 — 인트로 카드를 messages에 저장 후 챗봇 첫 메시지 생성."""
+    # 진입 시점의 clean 메시지 수 저장 (이후 4턴 이상 체크에 사용)
+    clean_so_far = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+    st.session_state["distortion_start_messages"] = len(clean_so_far)
+
     # 인트로 카드를 대화 기록 맨 아래에 삽입 (특수 role로 구분)
     st.session_state.messages.append({
         "role":    "__distortion_intro__",
@@ -722,8 +727,11 @@ def render_chat_input(config: SidebarConfig) -> None:
 
         # ── 인지왜곡 탐색 단계: 챗봇 응답 전에 충분성 체크 ──────────────────
         elif phase == "distortion":
-            clean_messages = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-            if check_distortion_sufficient(api_key, clean_messages):
+            # distortion 단계 진입 이후 메시지만 카운트 (이전 단계 대화 제외)
+            distortion_msgs = st.session_state.get("distortion_start_messages", 0)
+            all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+            since_distortion = all_clean[distortion_msgs:]
+            if check_distortion_sufficient(api_key, since_distortion):
                 # 충분히 탐색됨 → 결과 카드 + 재구조화로 전환 (챗봇 응답 없이)
                 st.session_state.phase = "reframing"
                 _start_reframing()
