@@ -269,6 +269,31 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     margin: 10px 0 16px 0; font-size: 0.9rem; color: #475569;
     line-height: 1.7; font-style: italic;
 }
+/* 인지왜곡 선택 카드 */
+.select-card {
+    background: #ffffff;
+    border: 1.5px solid #ddd6fe;
+    border-radius: 20px;
+    padding: 22px 26px;
+    margin: 14px 0 20px 0;
+    animation: scaleIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+}
+.select-card-title {
+    font-size: 1rem; font-weight: 700; color: #5b21b6; margin-bottom: 6px;
+}
+.select-card-sub {
+    font-size: 0.85rem; color: #7c3aed; margin-bottom: 16px; line-height: 1.6;
+}
+.select-item {
+    background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+    border: 1px solid #e9d5ff;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+.select-item-name { font-size: 0.92rem; font-weight: 700; color: #3b0764; margin-bottom: 4px; }
+.select-item-reason { font-size: 0.84rem; color: #4c1d95; line-height: 1.65; }
+
 /* 인지왜곡 결과 카드 */
 .distortion-result {
     background: #ffffff;
@@ -380,7 +405,7 @@ def init_session() -> None:
         "user_mood":       None,
         "chat_style":      None,
         # 정보 수집 관련
-        "phase":                    "collecting",   # "collecting" | "confirming" | "distortion" | "reframing"
+        "phase":                    "collecting",   # "collecting" | "confirming" | "distortion" | "selecting" | "reframing"
         "collected_info":           None,           # check_info_sufficient 결과
         "distortion_start_messages": 0,             # distortion 단계 진입 시점의 clean 메시지 수
     }
@@ -501,7 +526,7 @@ def _phase_badge() -> None:
             "<div class='phase-badge phase-distortion'>🔎 생각 속에 숨은 패턴을 찾아보는 중이에요</div>",
             unsafe_allow_html=True,
         )
-    elif phase == "reframing":
+    elif phase in ("selecting", "reframing"):
         st.markdown(
             "<div class='phase-badge phase-reframing'>🌱 생각을 함께 새롭게 바라보는 중이에요</div>",
             unsafe_allow_html=True,
@@ -533,6 +558,47 @@ def render_history() -> None:
         avatar = "🧑" if msg["role"] == "user" else STYLES[st.session_state.chat_style]["avatar"]
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
+
+
+def render_distortion_select() -> None:
+    """발견된 왜곡 패턴 중 하나를 선택하는 카드."""
+    distortions = st.session_state.get("last_distortions", [])
+    if not distortions:
+        # 선택지 없으면 바로 재구조화
+        st.session_state.phase = "reframing"
+        _do_start_reframing(None)
+        return
+
+    st.markdown(
+        "<div class='select-card'>"
+        "<div class='select-card-title'>✨ 어떤 생각 패턴을 바꿔보고 싶나요?</div>"
+        "<div class='select-card-sub'>"
+        "아래 패턴 중에서 지금 가장 고쳐보고 싶은 걸 하나 골라줘요.<br>"
+        "선택한 것을 중심으로 함께 새로운 시각을 찾아볼게요. 🌱"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    for i, d in enumerate(distortions[:3]):
+        name   = d.get("type", "")
+        reason = d.get("reason", "")
+        quote  = d.get("quote", "")
+        rank_labels = ["1순위", "2순위", "3순위"]
+        rank = rank_labels[i] if i < 3 else f"{i+1}순위"
+
+        st.markdown(
+            f"<div class='select-item'>"
+            f"<div class='select-item-name'>{rank} &nbsp; {name}</div>"
+            f"<div class='select-item-reason'>{reason}</div>"
+            + (f"<div class='distortion-quote' style='margin-top:8px;'>&#34;{quote}&#34;</div>" if quote else "")
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button(f"이 패턴 바꿔보기 →", key=f"select_distortion_{i}", use_container_width=True):
+            st.session_state.phase               = "reframing"
+            st.session_state["selected_distortion"] = d
+            _do_start_reframing(d)
 
 
 def render_summary_confirm(info: dict) -> None:
@@ -664,21 +730,36 @@ def _start_distortion() -> None:
 
 
 def _start_reframing() -> None:
-    """재구조화 시작 — 인지왜곡 결과 카드 삽입 후 챗봇 첫 메시지 생성."""
-    # 인지왜곡 추출 후 결과 카드를 messages에 삽입
+    """재구조화 준비 — 인지왜곡 추출 후 선택 단계로 전환."""
     api_key = _get_api_key()
-    if api_key:
-        clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-        distortions = extract_distortions(api_key, clean)
-        if distortions:
-            result_html = _render_distortion_result_html(distortions)
-            st.session_state.messages.append({
-                "role":    "__distortion_result__",
-                "content": result_html,
-            })
-            st.session_state["last_distortions"] = distortions
+    if not api_key:
+        return
+    clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+    distortions = extract_distortions(api_key, clean)
+    if distortions:
+        result_html = _render_distortion_result_html(distortions)
+        st.session_state.messages.append({
+            "role":    "__distortion_result__",
+            "content": result_html,
+        })
+        st.session_state["last_distortions"] = distortions
+        st.session_state.phase = "selecting"   # 선택 단계로 전환
+    else:
+        # 왜곡 추출 실패 시 바로 재구조화 시작
+        _do_start_reframing(None)
+    st.rerun()
+
+
+def _do_start_reframing(selected: dict | None) -> None:
+    """선택된 왜곡을 기반으로 재구조화 챗봇 첫 메시지 생성."""
     style = STYLES[st.session_state.chat_style]
     info  = st.session_state.collected_info
+    selected_info = (
+        f"\n\n[사용자가 선택한 생각 패턴]\n"
+        f"유형: {selected.get('type')}\n"
+        f"이유: {selected.get('reason')}\n"
+        f"사용자 발언: {selected.get('quote')}"
+    ) if selected else ""
     system = (
         style["prompt"] + REFRAMING_SUFFIX
         + f"\n\n[파악된 사용자 정보]\n"
@@ -686,9 +767,14 @@ def _start_reframing() -> None:
         f"생각: {info.get('thought')}\n"
         f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
         f"성별: {st.session_state.user_gender}, 나이: {st.session_state.user_age}세\n"
+        + selected_info
         + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
     )
-    _call_gpt_once(system, "[인지왜곡 탐색 완료. 재구조화를 시작해줘.]")
+    trigger = (
+        f"[사용자가 '{selected.get('type')}' 패턴을 골랐어. 이걸 중심으로 재구조화를 시작해줘.]"
+        if selected else "[인지왜곡 탐색 완료. 재구조화를 시작해줘.]"
+    )
+    _call_gpt_once(system, trigger)
 
 
 def render_chat_input(config: SidebarConfig) -> None:
@@ -697,6 +783,11 @@ def render_chat_input(config: SidebarConfig) -> None:
     # ── 확인 단계: 입력창 대신 확인 카드 ────────────────────────────────────
     if phase == "confirming":
         render_summary_confirm(st.session_state.get("collected_info", {}))
+        return
+
+    # ── 선택 단계: 왜곡 패턴 선택 카드 ──────────────────────────────────────
+    if phase == "selecting":
+        render_distortion_select()
         return
 
     placeholder_text = (
@@ -768,6 +859,13 @@ def render_chat_input(config: SidebarConfig) -> None:
                 f"생각: {info.get('thought')}\n"
                 f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
             )
+            selected = st.session_state.get("selected_distortion")
+            if phase == "reframing" and selected:
+                extra += (
+                    f"[사용자가 선택한 생각 패턴]\n"
+                    f"유형: {selected.get('type')}\n"
+                    f"이유: {selected.get('reason')}\n"
+                )
 
         system = (
             style["prompt"] + suffix + extra
