@@ -1004,6 +1004,7 @@ def render_chat_input(config: SidebarConfig) -> None:
             if result.get("sufficient"):
                 st.session_state.phase          = "confirming"
                 st.session_state.collected_info = result
+                st.session_state["suggestions"] = []
                 st.rerun()
 
             elif result.get("negative") is False:
@@ -1016,8 +1017,8 @@ def render_chat_input(config: SidebarConfig) -> None:
             all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
             since_distortion = all_clean[distortion_msgs:]
             if check_distortion_sufficient(api_key, since_distortion):
-                # 충분히 탐색됨 → 결과 카드 + 재구조화로 전환 (챗봇 응답 없이)
                 st.session_state.phase = "reframing"
+                st.session_state["suggestions"] = []
                 _start_reframing()
 
         style  = STYLES[st.session_state.chat_style]
@@ -1088,12 +1089,6 @@ def render_chat_input(config: SidebarConfig) -> None:
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-        # ── 답변 추천 생성 (done 제외 모든 단계) ────────────────────────────
-        if phase != "done":
-            clean_for_suggest = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-            suggestions = generate_suggestions(api_key, clean_for_suggest)
-            st.session_state["suggestions"] = suggestions
-
         # ── 재구조화 단계: 완료 여부 체크 ───────────────────────────────────
         if phase == "reframing":
             start_idx = st.session_state.get("reframing_start_messages", 0)
@@ -1103,7 +1098,16 @@ def render_chat_input(config: SidebarConfig) -> None:
             if result.get("complete"):
                 st.session_state.phase = "done"
                 st.session_state["reframing_summary"] = result.get("summary", "")
+                st.session_state["suggestions"] = []
                 st.rerun()
+
+        # ── 답변 추천 생성 — 단계 전환 없을 때만 (done/confirming 제외) ──────
+        current_phase = st.session_state.get("phase", "collecting")
+        if current_phase not in ("done", "confirming", "selecting"):
+            clean_for_suggest = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+            suggestions = generate_suggestions(api_key, clean_for_suggest)
+            st.session_state["suggestions"] = suggestions
+        st.rerun()
 
 
 def render_main(config: SidebarConfig) -> None:
