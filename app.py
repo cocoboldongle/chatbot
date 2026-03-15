@@ -12,7 +12,7 @@ from chat import apply_styles, init_session, render_main
 st.set_page_config(
     page_title="마음 다시 보기",
     page_icon="🌱",
-    layout="centered",
+    layout="wide",
 )
 
 apply_styles()
