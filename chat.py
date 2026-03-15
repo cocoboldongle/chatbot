@@ -97,6 +97,37 @@ REFRAMING_SUFFIX = """
 - 보다 균형잡힌 생각으로 이끌기
 """
 
+DISTORTION_SUFFIX = """
+
+[현재 단계: 인지왜곡 탐색]
+사용자의 생각 속에 어떤 인지왜곡 패턴이 있는지 함께 살펴보는 단계야.
+
+주요 인지왜곡 유형 (참고용):
+  - 흑백논리: "완전 성공 아니면 완전 실패"처럼 극단적으로 생각함
+  - 과잉일반화: 한 번 있었던 일로 "항상 이래", "다 그래"라고 생각함
+  - 마음읽기: 상대방이 무슨 생각인지 확인도 없이 단정지음
+  - 재앙화: "이러면 다 끝이야"처럼 최악의 결과만 상상함
+  - 개인화: 내 탓이 아닌 일도 "다 내 잘못"이라고 받아들임
+  - 감정적 추론: 기분이 나쁘면 "분명 뭔가 잘못된 거야"라고 느낌
+
+원칙:
+  - 어려운 심리 용어는 쓰지 마. 청소년이 쉽게 이해할 수 있는 말로 풀어줘.
+  - "혹시 이런 생각이 든 건 아닐까요?" 처럼 부드럽게 제안하는 방식으로.
+  - 한 번에 하나의 왜곡 패턴만 탐색해.
+  - 사용자가 동의하거나 거부할 공간을 줘. 강요하지 마.
+  - 공감을 잃지 마. 틀렸다고 지적하는 게 아니라, 함께 살펴보는 거야.
+"""
+
+REFRAMING_SUFFIX = """
+
+[현재 단계: 인지 재구조화]
+인지왜곡 패턴을 확인했어. 이제 더 균형잡힌 시각으로 생각을 바꿔나가는 단계야.
+- 왜곡된 생각 대신 현실적이고 균형잡힌 대안 생각을 함께 찾아줘
+- "그럼 이렇게 생각해볼 수도 있지 않을까요?" 식으로 제안
+- 작은 변화도 충분히 인정하고 격려해줘
+- 청소년 눈높이에 맞는 쉬운 말로
+"""
+
 MOOD_EMOJIS = ["😭", "😢", "😟", "😕", "😐", "🙂", "😊", "😄", "😁", "🤩", "🥳"]
 
 CSS = """
@@ -223,12 +254,32 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     margin: 10px 0 16px 0; font-size: 0.9rem; color: #475569;
     line-height: 1.7; font-style: italic;
 }
+/* 인지왜곡 인트로 카드 */
+.distortion-intro {
+    background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
+    border: 1.5px solid #c4b5fd;
+    border-radius: 20px;
+    padding: 22px 26px;
+    margin: 12px 0 20px 0;
+    animation: scaleIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+}
+.distortion-intro-title {
+    font-size: 1rem; font-weight: 700; color: #5b21b6; margin-bottom: 10px;
+}
+.distortion-intro-body {
+    font-size: 0.88rem; color: #4c1d95; line-height: 1.8;
+}
+.distortion-intro-example {
+    background: #ffffff; border-radius: 10px; padding: 10px 14px;
+    margin-top: 12px; font-size: 0.84rem; color: #6d28d9; line-height: 1.75;
+}
 .phase-badge {
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 0.75rem; font-weight: 600; padding: 3px 10px;
     border-radius: 20px; margin-bottom: 8px;
 }
 .phase-collecting { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+.phase-distortion { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
 .phase-reframing  { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
 </style>
 """
@@ -274,8 +325,9 @@ def init_session() -> None:
         "user_mood":       None,
         "chat_style":      None,
         # 정보 수집 관련
-        "phase":           "collecting",   # "collecting" | "confirming" | "reframing"
+        "phase":           "collecting",   # "collecting" | "confirming" | "distortion" | "reframing"
         "collected_info":  None,           # check_info_sufficient 결과
+        "distortion_intro_shown": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -389,6 +441,11 @@ def _phase_badge() -> None:
             "<div class='phase-badge phase-collecting'>💬 어떤 일이 있었는지 들어보는 중이에요</div>",
             unsafe_allow_html=True,
         )
+    elif phase == "distortion":
+        st.markdown(
+            "<div class='phase-badge phase-distortion'>🔎 생각 속에 숨은 패턴을 찾아보는 중이에요</div>",
+            unsafe_allow_html=True,
+        )
     elif phase == "reframing":
         st.markdown(
             "<div class='phase-badge phase-reframing'>🌱 생각을 함께 새롭게 바라보는 중이에요</div>",
@@ -412,6 +469,28 @@ def render_history() -> None:
         )
 
     _phase_badge()
+
+    # ── 인지왜곡 단계 첫 진입 시 인트로 카드 ────────────────────────────────
+    phase = st.session_state.get("phase", "collecting")
+    if phase == "distortion" and not st.session_state.get("distortion_intro_shown"):
+        intro_html = (
+            "<div class='distortion-intro'>"
+            "<div class='distortion-intro-title'>🔎 이제 생각 속 패턴을 같이 찾아볼게요</div>"
+            "<div class='distortion-intro-body'>"
+            "우리가 힘들 때, 머릿속에서 생각이 조금 과장되거나 한쪽으로 치우치는 경우가 있어요.<br>"
+            "이걸 <b>인지왜곡</b>이라고 하는데, 나쁜 게 아니에요. 누구나 그럴 수 있어요. 😊<br><br>"
+            "지금부터 아까 나눈 이야기 속에서 혹시 그런 패턴이 있었는지 함께 살펴볼게요."
+            "<div class='distortion-intro-example'>"
+            "예를 들면 이런 것들이에요 👇<br>"
+            "• <b>흑백논리</b> — &#39;이게 안 되면 다 끝이야&#39;<br>"
+            "• <b>마음읽기</b> — &#39;저 사람이 나를 싫어하는 게 분명해&#39;<br>"
+            "• <b>과잉일반화</b> — &#39;나는 항상 이렇게 실패해&#39;"
+            "</div>"
+            "</div>"
+            "</div>"
+        )
+        st.markdown(intro_html, unsafe_allow_html=True)
+        st.session_state["distortion_intro_shown"] = True
 
     for msg in st.session_state.messages:
         avatar = "🧑" if msg["role"] == "user" else STYLES[st.session_state.chat_style]["avatar"]
@@ -447,10 +526,9 @@ def render_summary_confirm(info: dict) -> None:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("✅ 맞아요, 계속할게요", type="primary", use_container_width=True, key="confirm_yes"):
-            st.session_state.phase          = "reframing"
+            st.session_state.phase          = "distortion"
             st.session_state.collected_info = info
-            # 챗봇이 재구조화 시작 메시지를 보내도록 트리거
-            _start_reframing()
+            _start_distortion()
     with col2:
         if st.button("✏️ 조금 달라요", use_container_width=True, key="confirm_no"):
             st.session_state.phase          = "collecting"
@@ -463,13 +541,46 @@ def render_summary_confirm(info: dict) -> None:
             st.rerun()
 
 
-def _start_reframing() -> None:
-    """재구조화 시작 시 챗봇 첫 메시지 생성."""
+def _call_gpt_once(system: str, trigger: str, max_tokens: int = 600) -> None:
+    """시스템 프롬프트 + 현재 대화 기반으로 챗봇 메시지 한 번 생성 후 저장."""
     api_key = _get_api_key()
     if not api_key:
         st.rerun()
         return
+    client   = __import__("openai").OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system},
+            *st.session_state.messages,
+            {"role": "user", "content": trigger},
+        ],
+        temperature=0.7,
+        max_tokens=max_tokens,
+    )
+    reply = response.choices[0].message.content
+    st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.rerun()
 
+
+def _start_distortion() -> None:
+    """인지왜곡 탐색 시작 — 인트로 멘트 표시 후 챗봇 첫 메시지 생성."""
+    style = STYLES[st.session_state.chat_style]
+    info  = st.session_state.collected_info
+    system = (
+        style["prompt"] + DISTORTION_SUFFIX
+        + f"\n\n[파악된 사용자 정보]\n"
+        f"상황: {info.get('situation')}\n"
+        f"생각: {info.get('thought')}\n"
+        f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
+        f"성별: {st.session_state.user_gender}, 나이: {st.session_state.user_age}세\n"
+        + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
+    )
+    _call_gpt_once(system, "[정보 확인 완료. 인지왜곡 탐색을 자연스럽게 시작해줘.]")
+
+
+def _start_reframing() -> None:
+    """재구조화 시작 — 챗봇 첫 메시지 생성."""
     style = STYLES[st.session_state.chat_style]
     info  = st.session_state.collected_info
     system = (
@@ -481,21 +592,7 @@ def _start_reframing() -> None:
         f"성별: {st.session_state.user_gender}, 나이: {st.session_state.user_age}세\n"
         + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
     )
-
-    client   = __import__("openai").OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system},
-            *st.session_state.messages,
-            {"role": "user", "content": "[정보 확인 완료. 인지 재구조화를 시작해줘.]"},
-        ],
-        temperature=0.7,
-        max_tokens=600,
-    )
-    reply = response.choices[0].message.content
-    st.session_state.messages.append({"role": "assistant", "content": reply})
-    st.rerun()
+    _call_gpt_once(system, "[인지왜곡 탐색 완료. 재구조화를 시작해줘.]")
 
 
 def render_chat_input(config: SidebarConfig) -> None:
@@ -508,6 +605,7 @@ def render_chat_input(config: SidebarConfig) -> None:
 
     placeholder_text = (
         "오늘 어떤 일이 있었나요?" if phase == "collecting"
+        else "네, 계속 이야기해 주세요" if phase == "distortion"
         else "자유롭게 이야기해 주세요"
     )
 
@@ -548,11 +646,16 @@ def render_chat_input(config: SidebarConfig) -> None:
 부드럽게 넘어가봐. 억지스럽지 않게, 대화 흐름에 맞게.
 """
         else:
-            suffix = INFO_GATHERING_SUFFIX if phase == "collecting" else REFRAMING_SUFFIX
+            if phase == "collecting":
+                suffix = INFO_GATHERING_SUFFIX
+            elif phase == "distortion":
+                suffix = DISTORTION_SUFFIX
+            else:
+                suffix = REFRAMING_SUFFIX
 
         # 재구조화 단계면 수집된 정보도 함께 전달
         extra = ""
-        if phase == "reframing" and st.session_state.collected_info:
+        if phase in ("reframing", "distortion") and st.session_state.collected_info:
             info  = st.session_state.collected_info
             extra = (
                 f"\n\n[파악된 사용자 정보]\n"
