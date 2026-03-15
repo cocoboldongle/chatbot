@@ -528,12 +528,17 @@ def _call_gpt_once(system: str, trigger: str, max_tokens: int = 600) -> None:
     if not api_key:
         st.rerun()
         return
+    # 특수 role(인트로 카드 등)은 OpenAI API에 전달하지 않음
+    api_messages = [
+        m for m in st.session_state.messages
+        if m.get("role") in ("user", "assistant")
+    ]
     client   = __import__("openai").OpenAI(api_key=api_key)
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": system},
-            *st.session_state.messages,
+            *api_messages,
             {"role": "user", "content": trigger},
         ],
         temperature=0.7,
@@ -611,7 +616,8 @@ def render_chat_input(config: SidebarConfig) -> None:
 
         # ── 정보 수집 단계: 챗봇 응답 전에 먼저 충분성 체크 ────────────────
         if phase == "collecting":
-            result = check_info_sufficient(api_key, st.session_state.messages)
+            clean_messages = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+            result = check_info_sufficient(api_key, clean_messages)
 
             if result.get("sufficient"):
                 # 부정적 사건이 충분히 수집됨 → 요약 카드로 전환
@@ -665,9 +671,13 @@ def render_chat_input(config: SidebarConfig) -> None:
             placeholder   = st.empty()
             full_response = ""
             try:
+                api_messages = [
+                    m for m in st.session_state.messages
+                    if m.get("role") in ("user", "assistant")
+                ]
                 for chunk in stream_chat(
                     api_key=api_key,
-                    messages=st.session_state.messages,
+                    messages=api_messages,
                     system_prompt=system,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
