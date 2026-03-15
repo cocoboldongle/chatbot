@@ -329,6 +329,13 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     margin-bottom: 6px;
     padding-left: 2px;
 }
+.direction-hint {
+    font-size: 0.75rem;
+    color: #b0bec5;
+    margin-top: 10px;
+    padding-left: 2px;
+    line-height: 1.5;
+}
 .stButton[data-suggest] > button {
     background: #f8fafc !important;
     border: 1px solid #e2e8f0 !important;
@@ -676,6 +683,15 @@ def render_history() -> None:
                     st.session_state["_selected_suggestion"] = s
                     st.session_state["suggestions"] = []
                     st.rerun()
+
+    # ── 대화 방향 힌트 ───────────────────────────────────────────────────────
+    if phase_now not in ("confirming", "selecting", "done"):
+        st.markdown(
+            "<div class='direction-hint'>"
+            "💡 다른 방향으로 이야기하고 싶다면, 왼쪽 사이드바의 <b>원하는 대화 방향</b>에 입력해보세요."
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
     # ── 완료 단계: 마무리 카드 표시 ──────────────────────────────────────────
     if phase_now == "done":
