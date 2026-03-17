@@ -300,7 +300,7 @@ SUGGEST_PROMPT = """
 
 조건:
   - 각 답변은 서로 다른 감정이나 입장을 반영해야 해 (긍정적/중립적/부정적 또는 다양한 관점)
-  - 50~100자 내외의 자연스러운 말로 (실제 청소년이 말하듯, 문장이 완결되도록)
+  - 20~40자 내외의 자연스러운 말로 (실제 청소년이 말하듯, 문장이 완결되도록)
   - 반말 또는 편한 말투로
   - 답변이 대화 맥락에 맞아야 해
 
@@ -339,3 +339,56 @@ def generate_suggestions(
         return json.loads(raw[start:end]).get("suggestions", [])
     except Exception:
         return []
+
+
+# ── 위기 발언 감지 ─────────────────────────────────────────────────────────────
+
+CRISIS_DETECT_PROMPT = """
+너는 청소년 정신건강 위기 감지 전문가야. 아래 메시지 하나를 분석하고 JSON만 반환해.
+
+감지 대상 (아래 중 하나라도 해당하면 crisis: true):
+  - 구체적인 자살 계획 언급 (방법, 장소, 시간 등)
+  - 자해 의도나 계획 표현
+  - "죽고 싶다", "사라지고 싶다"를 넘어선 매우 심각한 수준의 발언
+    (단순한 "힘들다", "죽고 싶다" 표현은 crisis: false)
+  - 극단적 자기혐오와 함께 구체적 행동 의지 표현
+
+주의:
+  - "죽고 싶다", "힘들어 죽겠다" 같은 일반적 표현 → crisis: false
+  - 구체적 계획이나 매우 심각한 수준일 때만 → crisis: true
+  - 애매하면 false
+
+반환 형식 (JSON만):
+{"crisis": true} 또는 {"crisis": false}
+"""
+
+
+def detect_crisis(
+    api_key: str,
+    message: str,
+    model: str = "gpt-4o",
+) -> bool:
+    """
+    단일 메시지에서 심각한 위기 발언 여부 감지.
+    True = 위기 발언 감지됨.
+    """
+    if not message or not message.strip():
+        return False
+
+    client   = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": CRISIS_DETECT_PROMPT},
+            {"role": "user",   "content": message},
+        ],
+        temperature=0,
+        max_tokens=20,
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        return json.loads(raw[start:end]).get("crisis", False)
+    except Exception:
+        return False
