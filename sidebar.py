@@ -249,10 +249,14 @@ def render_sidebar() -> SidebarConfig:
 
         st.divider()
 
-        # ── 고급 설정 ────────────────────────────────────────────
+        # ── 고급 설정 (비밀번호 잠금) ─────────────────────────────
         with st.expander("⚙️ 고급 설정", expanded=False):
-            temperature = st.slider("창의성 (Temperature)", 0.0, 1.5, 0.7, 0.1)
-            max_tokens  = st.slider("최대 응답 길이", 256, 2048, 800, 128)
+            pw = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요", key="admin_pw")
+            if pw == "1234":
+                temperature = st.slider("창의성 (Temperature)", 0.0, 1.5, 0.7, 0.1)
+                max_tokens  = st.slider("최대 응답 길이", 256, 2048, 800, 128)
+            elif pw:
+                st.caption("❌ 비밀번호가 틀렸어요.")
 
         st.divider()
 
