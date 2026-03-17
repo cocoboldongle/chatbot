@@ -1077,7 +1077,7 @@ def render_chat_input(config: SidebarConfig) -> None:
         # ── 위기 발언 감지 ────────────────────────────────────────────────────
         if detect_crisis(api_key, prompt):
             st.session_state["crisis_count"] = st.session_state.get("crisis_count", 0) + 1
-            if st.session_state["crisis_count"] >= 3:
+            if st.session_state["crisis_count"] >= 2:
                 st.session_state["crisis_modal_shown"] = True
                 st.rerun()
 
