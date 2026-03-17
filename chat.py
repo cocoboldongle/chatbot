@@ -3,7 +3,7 @@ chat.py — 채팅 화면 렌더링
 흐름: 인트로 → 설문 → 스타일 선택 → 정보수집 채팅 → 요약 확인 → 인지 재구조화
 """
 import streamlit as st
-from llm import stream_chat, check_info_sufficient, extract_distortions, check_distortion_sufficient, check_reframing_complete, generate_suggestions
+from llm import stream_chat, check_info_sufficient, extract_distortions, check_distortion_sufficient, check_reframing_complete, generate_suggestions, detect_crisis
 from sidebar import SidebarConfig
 
 STYLES = {
@@ -352,6 +352,29 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     color: #1d4ed8 !important;
 }
 
+/* 위기 안내 모달 */
+.crisis-modal {
+    background: #ffffff;
+    border: 2px solid #fca5a5;
+    border-radius: 20px;
+    padding: 28px 30px;
+    margin: 16px 0;
+    animation: scaleIn 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+.crisis-modal-icon { font-size: 2.2rem; margin-bottom: 10px; }
+.crisis-modal-title {
+    font-size: 1.05rem; font-weight: 700; color: #b91c1c; margin-bottom: 10px;
+}
+.crisis-modal-body {
+    font-size: 0.9rem; color: #374151; line-height: 1.8; margin-bottom: 16px;
+}
+.crisis-modal-contact {
+    background: #fef2f2; border-radius: 12px; padding: 14px 18px;
+    font-size: 0.88rem; color: #991b1b; line-height: 1.9;
+    margin-bottom: 16px;
+}
+.crisis-modal-contact b { color: #b91c1c; font-size: 1rem; }
+
 /* 대화 완료 카드 */
 .complete-card {
     background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
@@ -511,6 +534,8 @@ def init_session() -> None:
         "collected_info":           None,           # check_info_sufficient 결과
         "distortion_start_messages": 0,             # distortion 단계 진입 시점의 clean 메시지 수
         "reframing_start_messages":  0,             # reframing 단계 진입 시점의 clean 메시지 수
+        "crisis_count":             0,             # 심각한 위기 발언 누적 횟수
+        "crisis_modal_shown":       False,         # 위기 안내창 표시 여부
         "suggestions":              [],             # 현재 답변 추천 목록
         "phase":                    "collecting",
     }
@@ -692,6 +717,31 @@ def render_history() -> None:
             "</div>",
             unsafe_allow_html=True,
         )
+
+    # ── 위기 안내 모달 (누적 3회 이상) ──────────────────────────────────────
+    if st.session_state.get("crisis_modal_shown"):
+        st.markdown(
+            "<div class='crisis-modal'>"
+            "<div class='crisis-modal-icon'>🆘</div>"
+            "<div class='crisis-modal-title'>잠깐, 지금 많이 힘드신가요?</div>"
+            "<div class='crisis-modal-body'>"
+            "지금 하신 말씀들이 마음에 걸려요.<br>"
+            "이 챗봇보다 실제로 도움을 드릴 수 있는 전문가와 이야기하시는 게 더 좋을 것 같아요."
+            "</div>"
+            "<div class='crisis-modal-contact'>"
+            "📞 <b>청소년 전화 1388</b> — 24시간, 무료<br>"
+            "💬 <b>자살예방상담전화 1393</b> — 24시간, 무료<br>"
+            "🏥 <b>정신건강 위기상담전화 1577-0199</b> — 24시간"
+            "</div>"
+            "<div style='font-size:0.82rem;color:#6b7280;'>"
+            "계속 대화하셔도 되지만, 전문 상담사의 도움을 꼭 받아보시길 권해드려요. 🤍"
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button("✅ 확인했어요", key="crisis_confirm", use_container_width=False):
+            st.session_state["crisis_modal_shown"] = False
+            st.rerun()
 
     # ── 완료 단계: 마무리 카드 표시 ──────────────────────────────────────────
     if phase_now == "done":
@@ -1023,6 +1073,13 @@ def render_chat_input(config: SidebarConfig) -> None:
         st.session_state["suggestions"] = []   # 입력 시 추천 초기화
         with st.chat_message("user", avatar="🧑"):
             st.markdown(prompt)
+
+        # ── 위기 발언 감지 ────────────────────────────────────────────────────
+        if detect_crisis(api_key, prompt):
+            st.session_state["crisis_count"] = st.session_state.get("crisis_count", 0) + 1
+            if st.session_state["crisis_count"] >= 3:
+                st.session_state["crisis_modal_shown"] = True
+                st.rerun()
 
         # ── 정보 수집 단계: 챗봇 응답 전에 먼저 충분성 체크 ────────────────
         if phase == "collecting":
