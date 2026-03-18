@@ -988,33 +988,8 @@ def _start_reframing() -> None:
 
 
 # 왜곡 유형별 최적 방법 매핑
-DISTORTION_METHOD_MAP = {
-    "과잉 일반화":    "방법 1 (대안적 설명 찾기)",
-    "Overgeneralization": "방법 1 (대안적 설명 찾기)",
-    "성급한 판단":    "방법 1 (대안적 설명 찾기)",
-    "Jumping to Conclusions": "방법 1 (대안적 설명 찾기)",
-    "감정적 추론":    "방법 2 (객관적 증거 수집)",
-    "Emotional Reasoning": "방법 2 (객관적 증거 수집)",
-    "낙인찍기":       "방법 2 (객관적 증거 수집)",
-    "Labeling":       "방법 2 (객관적 증거 수집)",
-    "흑백 사고":      "방법 3 (비용/결과 재평가)",
-    "All-or-Nothing Thinking": "방법 3 (비용/결과 재평가)",
-    "확대와 축소":    "방법 3 (비용/결과 재평가)",
-    "Magnification":  "방법 3 (비용/결과 재평가)",
-    "개인화":         "방법 4 (관점 바꾸기)",
-    "Personalization": "방법 4 (관점 바꾸기)",
-    "부정적 편향":    "방법 4 (관점 바꾸기)",
-    "Mental Filter":  "방법 4 (관점 바꾸기)",
-    "긍정 축소화":    "방법 4 (관점 바꾸기)",
-    "Disqualifying the Positive": "방법 4 (관점 바꾸기)",
-    "해야 한다 진술": "방법 5 (기적 질문 & 작은 행동)",
-    "Should Statements": "방법 5 (기적 질문 & 작은 행동)",
-}
-
-
 def _do_start_reframing(selected: dict | None) -> None:
-    """선택된 왜곡을 기반으로 최적 방법을 선택해 재구조화 챗봇 첫 메시지 생성."""
-    # reframing 진입 시점 저장
+    """선택된 왜곡과 대화 맥락을 보고 GPT가 최적 방법 2~3개를 직접 선택해 재구조화 시작."""
     clean_so_far = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
     st.session_state["reframing_start_messages"] = len(clean_so_far)
 
@@ -1022,28 +997,27 @@ def _do_start_reframing(selected: dict | None) -> None:
     info  = st.session_state.collected_info
 
     selected_info = ""
-    trigger_text  = "[인지왜곡 탐색 완료. 재구조화를 시작해줘.]"
-
     if selected:
-        distortion_type = selected.get("type", "")
-        # 매핑에서 찾고 없으면 영문명으로도 시도
-        method = (
-            DISTORTION_METHOD_MAP.get(distortion_type)
-            or DISTORTION_METHOD_MAP.get(selected.get("english", ""))
-            or "방법 1 (대안적 설명 찾기)"   # 기본값
-        )
         selected_info = (
             f"\n\n[사용자가 선택한 생각 패턴]\n"
-            f"유형: {distortion_type}\n"
+            f"유형: {selected.get('type')}\n"
             f"이유: {selected.get('reason')}\n"
-            f"사용자 발언: {selected.get('quote')}\n"
-            f"→ 이 왜곡에는 {method}을 사용해줘."
+            f"사용자 발언: {selected.get('quote')}"
         )
-        trigger_text = (
-            f"[사용자가 '{distortion_type}' 패턴을 골랐어. "
-            f"{method}을 활용해서 자연스럽게 재구조화를 시작해줘. "
-            f"첫 마디는 공감부터 시작하고, 바로 재구조화로 들어가지 말고 부드럽게 이어줘.]"
-        )
+
+    trigger_text = (
+        f"[재구조화를 시작해줘.\n"
+        f"아래 5가지 방법 중 이 사용자의 왜곡 유형, 상황, 대화 맥락을 고려해서 "
+        f"가장 적합한 방법 2~3가지를 네가 직접 선택해.\n"
+        f"선택한 방법들을 대화 흐름에 따라 자연스럽게 섞어서 사용해.\n"
+        f"같은 방법만 반복하지 말고 대화가 진행되면서 다른 방법으로 전환해도 돼.\n"
+        f"첫 마디는 공감부터 시작하고, 바로 재구조화로 들어가지 말고 부드럽게 이어줘.\n\n"
+        f"방법 1. 대안적 설명 찾기 — 다른 가능성 3가지를 탐색\n"
+        f"방법 2. 객관적 증거 수집 — 사실 vs 추측 구분\n"
+        f"방법 3. 비용/결과 재평가 — 최악 시나리오의 실제 크기 재평가\n"
+        f"방법 4. 관점 바꾸기 — 친구 입장 또는 10년 후 시각\n"
+        f"방법 5. 기적 질문 & 작은 행동 — 해결된 미래 상상 후 작은 행동 찾기]"
+    )
 
     system = (
         style["prompt"] + REFRAMING_SUFFIX
