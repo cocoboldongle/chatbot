@@ -132,6 +132,7 @@ def _build_txt(messages: list, profile: dict) -> str:
         f"나이       : {profile.get('age', '-')}세",
         f"기분 점수  : {profile.get('mood', '-')}/10",
         f"대화 스타일: {profile.get('style_label', '-')}",
+        f"재구조화 방법: {profile.get('reframing_methods', '-')}",
         "───────────────────────────────────",
         "",
     ]
