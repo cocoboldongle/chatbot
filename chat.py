@@ -375,24 +375,45 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 }
 .crisis-modal-contact b { color: #b91c1c; font-size: 1rem; }
 
+/* 변화 감지 뱃지 */
+.progress-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #15803d;
+    margin: 8px 0 4px 0;
+    animation: fadeIn 0.4s ease both;
+}
+
 /* 대화 완료 카드 */
 .complete-card {
     background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
     border: 2px solid #86efac;
-    border-radius: 24px;
-    padding: 28px 30px;
-    margin: 16px 0 24px 0;
+    border-radius: 20px;
+    padding: 20px 24px;
+    margin: 16px 0 8px 0;
     text-align: center;
     animation: scaleIn 0.6s cubic-bezier(0.22,1,0.36,1) both;
 }
-.complete-icon { font-size: 2.8rem; margin-bottom: 12px; }
-.complete-title { font-size: 1.1rem; font-weight: 700; color: #15803d; margin-bottom: 10px; }
+.complete-title { font-size: 1rem; font-weight: 700; color: #15803d; margin-bottom: 6px; }
 .complete-summary {
-    font-size: 0.9rem; color: #166534; line-height: 1.8;
-    background: #ffffff; border-radius: 12px; padding: 14px 18px;
-    margin: 12px 0 16px 0; text-align: left;
+    font-size: 0.87rem; color: #166534; line-height: 1.8;
+    background: #ffffff; border-radius: 10px; padding: 12px 16px;
+    margin: 10px 0 8px 0; text-align: left;
 }
-.complete-footer { font-size: 0.82rem; color: #4ade80; margin-top: 8px; }
+.complete-footer {
+    font-size: 0.82rem; color: #166534; margin-top: 4px; line-height: 1.6;
+}
+.complete-continue {
+    font-size: 0.82rem; color: #4b5563; margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid #bbf7d0;
+}
 
 /* 인지왜곡 선택 카드 */
 .select-card {
@@ -535,6 +556,7 @@ def init_session() -> None:
         "distortion_start_messages": 0,             # distortion 단계 진입 시점의 clean 메시지 수
         "reframing_start_messages":  0,             # reframing 단계 진입 시점의 clean 메시지 수
         "crisis_count":             0,             # 심각한 위기 발언 누적 횟수
+        "progress_count":            0,             # 재구조화 변화 감지 누적 횟수
         "crisis_modal_shown":       False,         # 위기 안내창 표시 여부
         "suggestions":              [],             # 현재 답변 추천 목록
         "phase":                    "collecting",
@@ -743,16 +765,28 @@ def render_history() -> None:
             st.session_state["crisis_modal_shown"] = False
             st.rerun()
 
-    # ── 완료 단계: 마무리 카드 표시 ──────────────────────────────────────────
+    # ── 변화 감지 뱃지 (reframing 단계에서 progress_count 반영) ─────────────
+    if phase_now == "reframing":
+        cnt = st.session_state.get("progress_count", 0)
+        if cnt > 0:
+            st.markdown(
+                "<div class='progress-badge'>🌱 생각이 조금씩 변화하고 있어요</div>",
+                unsafe_allow_html=True,
+            )
+
+    # ── 최종 완료 카드 (2회 누적 시) ─────────────────────────────────────────
     if phase_now == "done":
         summary = st.session_state.get("reframing_summary", "")
         st.markdown(
             "<div class='complete-card'>"
-            "<div class='complete-icon'>🌱</div>"
-            "<div class='complete-title'>오늘 정말 잘 해냈어요!</div>"
+            "<div class='complete-title'>🌱 오늘 정말 잘 해냈어요!</div>"
             + (f"<div class='complete-summary'>{summary}</div>" if summary else "")
             + "<div class='complete-footer'>"
-            "힘든 생각을 꺼내고 함께 살펴봐줘서 고마워요. 오늘의 작은 변화가 쌓이면 달라질 거예요. 💚"
+            "힘든 생각을 꺼내고 함께 살펴봐줘서 고마워요.<br>"
+            "오늘의 작은 변화가 쌓이면 분명 달라질 거예요. 💚"
+            "</div>"
+            "<div class='complete-continue'>"
+            "더 하고 싶은 이야기가 있다면 언제든 입력해도 좋아요."
             "</div>"
             "</div>",
             unsafe_allow_html=True,
@@ -1028,10 +1062,9 @@ def render_chat_input(config: SidebarConfig) -> None:
 
     phase = st.session_state.get("phase", "collecting")
 
-    # ── 완료 단계: 입력창은 유지, 완료 카드는 render_history에서 표시 ────────
+    # ── 완료 단계: 입력창 유지, 계속 대화 가능 ─────────────────────────────
     if phase == "done":
-        st.chat_input("자유롭게 이야기해 주세요", disabled=False)
-        return
+        pass   # 아래 입력창 렌더링으로 계속 진행
 
     # ── 확인 단계: 입력창 대신 확인 카드 ────────────────────────────────────
     if phase == "confirming":
@@ -1077,7 +1110,7 @@ def render_chat_input(config: SidebarConfig) -> None:
         # ── 위기 발언 감지 ────────────────────────────────────────────────────
         if detect_crisis(api_key, prompt):
             st.session_state["crisis_count"] = st.session_state.get("crisis_count", 0) + 1
-            if st.session_state["crisis_count"] >= 2:
+            if st.session_state["crisis_count"] >= 3:
                 st.session_state["crisis_modal_shown"] = True
                 st.rerun()
 
@@ -1182,9 +1215,15 @@ def render_chat_input(config: SidebarConfig) -> None:
             since_reframing = all_clean[start_idx:]
             result = check_reframing_complete(api_key, since_reframing)
             if result.get("complete"):
-                st.session_state.phase = "done"
+                cnt = st.session_state.get("progress_count", 0) + 1
+                st.session_state["progress_count"] = cnt
+                # 매번 최신 summary 저장
                 st.session_state["reframing_summary"] = result.get("summary", "")
-                st.session_state["suggestions"] = []
+                if cnt >= 2:
+                    # 2회 누적 → 최종 완료
+                    st.session_state.phase = "done"
+                    st.session_state["suggestions"] = []
+                # 1회 → 뱃지만 표시, 대화 계속
                 st.rerun()
 
         # ── 답변 추천 생성 — 단계 전환 없을 때만 (done/confirming 제외) ──────
