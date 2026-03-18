@@ -903,6 +903,14 @@ def _call_gpt_once(system: str, trigger: str, max_tokens: int = 600) -> None:
         max_tokens=max_tokens,
     )
     reply = response.choices[0].message.content
+
+    # [선택방법: ...] 태그 파싱 후 별도 저장, 메시지에서 제거
+    import re as _re
+    method_match = _re.search(r"\[선택방법:\s*([^\]]+)\]", reply)
+    if method_match:
+        st.session_state["selected_reframing_methods"] = method_match.group(1).strip()
+        reply = _re.sub(r"\[선택방법:[^\]]+\]\n?", "", reply).strip()
+
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.rerun()
 
@@ -1005,6 +1013,7 @@ def _do_start_reframing(selected: dict | None) -> None:
             f"사용자 발언: {selected.get('quote')}"
         )
 
+    # GPT에게 방법 선택을 맡기되, 선택한 방법을 첫 줄에 명시하도록 요청
     trigger_text = (
         f"[재구조화를 시작해줘.\n"
         f"아래 5가지 방법 중 이 사용자의 왜곡 유형, 상황, 대화 맥락을 고려해서 "
@@ -1016,8 +1025,13 @@ def _do_start_reframing(selected: dict | None) -> None:
         f"방법 2. 객관적 증거 수집 — 사실 vs 추측 구분\n"
         f"방법 3. 비용/결과 재평가 — 최악 시나리오의 실제 크기 재평가\n"
         f"방법 4. 관점 바꾸기 — 친구 입장 또는 10년 후 시각\n"
-        f"방법 5. 기적 질문 & 작은 행동 — 해결된 미래 상상 후 작은 행동 찾기]"
+        f"방법 5. 기적 질문 & 작은 행동 — 해결된 미래 상상 후 작은 행동 찾기\n\n"
+        f"중요: 응답 시작 전에 반드시 아래 형식으로 한 줄 출력해:\n"
+        f"[선택방법: 방법N, 방법N]\n"
+        f"이 줄은 내부 기록용이므로 사용자에게 자연스럽게 보이지 않게 처리됨.]"
     )
+    # 선택 방법 저장용 초기화
+    st.session_state["selected_reframing_methods"] = ""
 
     system = (
         style["prompt"] + REFRAMING_SUFFIX
