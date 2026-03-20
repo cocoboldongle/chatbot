@@ -5,6 +5,7 @@ import json
 import datetime
 import streamlit as st
 from dataclasses import dataclass
+from llm import mask_personal_info
 
 STYLE_LABELS = {
     "detective": "🔍 분석적 탐정형",
@@ -120,8 +121,8 @@ class SidebarConfig:
     user_direction: str   # 사용자가 원하는 대화 방향
 
 
-def _build_txt(messages: list, profile: dict) -> str:
-    """대화 내용을 텍스트로 변환."""
+def _build_txt(messages: list, profile: dict, mask: bool = False, api_key: str = "") -> str:
+    """대화 내용을 텍스트로 변환. mask=True 시 사용자 메시지 개인정보 마스킹."""
     now   = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     lines = [
         "═══════════════════════════════════",
@@ -133,24 +134,35 @@ def _build_txt(messages: list, profile: dict) -> str:
         f"기분 점수  : {profile.get('mood', '-')}/10",
         f"대화 스타일: {profile.get('style_label', '-')}",
         f"재구조화 방법: {profile.get('reframing_methods', '-')}",
+        f"개인정보 마스킹: {'적용됨' if mask else '미적용'}",
         "───────────────────────────────────",
         "",
     ]
     for msg in messages:
-        role  = "나" if msg["role"] == "user" else "챗봇"
+        role    = "나" if msg["role"] == "user" else "챗봇"
+        content = msg["content"]
+        if mask and msg["role"] == "user" and api_key:
+            content = mask_personal_info(api_key, content)
         lines.append(f"[{role}]")
-        lines.append(msg["content"])
+        lines.append(content)
         lines.append("")
     lines.append("═══════════════════════════════════")
     return "\n".join(lines)
 
 
-def _build_json(messages: list, profile: dict) -> str:
-    """대화 내용을 JSON으로 변환."""
+def _build_json(messages: list, profile: dict, mask: bool = False, api_key: str = "") -> str:
+    """대화 내용을 JSON으로 변환. mask=True 시 사용자 메시지 개인정보 마스킹."""
+    masked_messages = []
+    for msg in messages:
+        m = dict(msg)
+        if mask and m.get("role") == "user" and api_key:
+            m["content"] = mask_personal_info(api_key, m["content"])
+        masked_messages.append(m)
     data = {
         "exported_at": datetime.datetime.now().isoformat(),
+        "privacy_masked": mask,
         "profile": profile,
-        "messages": messages,
+        "messages": masked_messages,
     }
     return json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -273,22 +285,34 @@ def render_sidebar() -> SidebarConfig:
 
         st.caption("💾 대화 다운로드")
         if messages:
+            do_mask = st.toggle(
+                "🔒 개인정보 마스킹",
+                value=True,
+                help="이름·학교·지역 등 신상 정보를 *로 가려서 저장해요.",
+            )
+            try:
+                _api_key = st.secrets["OPENAI_API_KEY"]
+            except Exception:
+                _api_key = ""
+
             col1, col2 = st.columns(2)
             with col1:
                 st.download_button(
                     label="📄 TXT",
-                    data=_build_txt(messages, profile),
+                    data=_build_txt(messages, profile, mask=do_mask, api_key=_api_key),
                     file_name=f"{fname}.txt",
                     mime="text/plain",
                     use_container_width=True,
+                    key="dl_txt",
                 )
             with col2:
                 st.download_button(
                     label="🗂 JSON",
-                    data=_build_json(messages, profile),
+                    data=_build_json(messages, profile, mask=do_mask, api_key=_api_key),
                     file_name=f"{fname}.json",
                     mime="application/json",
                     use_container_width=True,
+                    key="dl_json",
                 )
         else:
             st.caption("대화를 시작하면 다운로드할 수 있어요.")
