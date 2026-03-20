@@ -392,3 +392,62 @@ def detect_crisis(
         return json.loads(raw[start:end]).get("crisis", False)
     except Exception:
         return False
+
+
+# ── 개인정보 마스킹 ────────────────────────────────────────────────────────────
+
+MASK_PROMPT = """
+너는 개인정보 보호 전문가야. 아래 대화 텍스트에서 개인을 식별할 수 있는 정보를 찾아서
+각 글자를 *로 대체해줘. JSON만 반환해. 다른 말은 절대 하지 마.
+
+마스킹 대상:
+  - 이름 (본인, 가족, 친구 등 실명)
+  - 학교명 (초/중/고/대학교)
+  - 지역명 (동네, 시, 구, 도로명 등 구체적 위치)
+  - 전화번호, 학번, 주민번호 등 식별 번호
+  - SNS 아이디, 이메일 주소
+  - 기타 특정 개인을 유추할 수 있는 고유 정보
+
+마스킹 하지 말아야 할 것:
+  - 나이, 성별, 감정 표현, 일반적인 상황 설명
+  - "엄마", "친구", "선생님" 같은 일반 호칭
+  - 챗봇 응답 (assistant 메시지)
+
+반환 형식:
+{"masked_text": "마스킹된 텍스트"}
+
+예시:
+입력: "저는 김민준이고 서울 강남구에 살아요. 한국중학교 다녀요."
+출력: {"masked_text": "저는 ***이고 서울 ***에 살아요. *****학교 다녀요."}
+"""
+
+
+def mask_personal_info(
+    api_key: str,
+    text: str,
+    model: str = "gpt-4o",
+) -> str:
+    """
+    텍스트에서 개인 식별 정보를 *로 마스킹.
+    실패 시 원본 텍스트 반환.
+    """
+    if not text or not text.strip():
+        return text
+
+    client   = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": MASK_PROMPT},
+            {"role": "user",   "content": text},
+        ],
+        temperature=0,
+        max_tokens=len(text) * 3,  # 원본보다 길어질 수 없음
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        return json.loads(raw[start:end]).get("masked_text", text)
+    except Exception:
+        return text
