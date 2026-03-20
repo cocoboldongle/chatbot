@@ -3,6 +3,7 @@ sidebar.py — 사이드바 렌더링
 """
 import json
 import datetime
+import requests
 import streamlit as st
 from dataclasses import dataclass
 from llm import mask_personal_info
@@ -167,6 +168,53 @@ def _build_json(messages: list, profile: dict, mask: bool = False, api_key: str 
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def _save_to_supabase(messages: list, profile: dict, mask: bool, api_key: str) -> bool:
+    """대화 데이터를 Supabase에 저장. 성공 시 True 반환."""
+    try:
+        url = st.secrets.get("SUPABASE_URL", "")
+        key = st.secrets.get("SUPABASE_KEY", "")
+        if not url or not key:
+            return False
+
+        # 마스킹 적용된 메시지 준비
+        clean_messages = [m for m in messages if m.get("role") in ("user", "assistant")]
+        if mask and api_key:
+            from llm import mask_personal_info as _mask
+            masked = []
+            for m in clean_messages:
+                mc = dict(m)
+                if mc["role"] == "user":
+                    mc["content"] = _mask(api_key, mc["content"])
+                masked.append(mc)
+        else:
+            masked = clean_messages
+
+        payload = {
+            "gender":            profile.get("gender", "-"),
+            "age":               profile.get("age"),
+            "mood":              profile.get("mood"),
+            "chat_style":        profile.get("style_label", "-"),
+            "reframing_methods": profile.get("reframing_methods", "-"),
+            "privacy_masked":    mask,
+            "messages":          masked,
+        }
+
+        resp = requests.post(
+            f"{url}/rest/v1/chat_logs",
+            headers={
+                "apikey":        key,
+                "Authorization": f"Bearer {key}",
+                "Content-Type":  "application/json",
+                "Prefer":        "return=minimal",
+            },
+            json=payload,
+            timeout=10,
+        )
+        return resp.status_code in (200, 201)
+    except Exception:
+        return False
+
+
 def render_sidebar() -> SidebarConfig:
     temperature = 0.7
     max_tokens  = 800
@@ -314,6 +362,15 @@ def render_sidebar() -> SidebarConfig:
                     use_container_width=True,
                     key="dl_json",
                 )
+
+            # ── DB 저장 버튼 ──────────────────────────────────────
+            if st.button("☁️ DB에 저장", use_container_width=True, key="save_db"):
+                with st.spinner("저장 중..."):
+                    ok = _save_to_supabase(messages, profile, mask=do_mask, api_key=_api_key)
+                if ok:
+                    st.success("✅ DB에 저장됐어요!")
+                else:
+                    st.error("❌ 저장 실패. Supabase 설정을 확인해주세요.")
         else:
             st.caption("대화를 시작하면 다운로드할 수 있어요.")
         st.divider()
