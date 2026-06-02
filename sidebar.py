@@ -381,6 +381,15 @@ def render_sidebar() -> SidebarConfig:
                 f"</div>",
                 unsafe_allow_html=True,
             )
+            # 왜곡 디버그 표시
+            last_d = st.session_state.get("last_distortions", [])
+            sel_d  = (st.session_state.get("selected_distortion") or {}).get("type", "-")
+            if last_d or sel_d != "-":
+                d_labels = [d.get("type", "-") for d in last_d[:3]]
+                st.caption(
+                    "🧩 왜곡: " + " / ".join(d_labels) + "\n"
+                    + "✅ 선택: " + sel_d
+                )
 
         st.divider()
 
