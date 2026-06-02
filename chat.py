@@ -3,7 +3,11 @@ chat.py — 채팅 화면 렌더링
 흐름: 인트로 → 설문 → 스타일 선택 → 정보수집 채팅 → 요약 확인 → 인지 재구조화
 """
 import streamlit as st
-from llm import stream_chat, check_info_sufficient, extract_distortions, check_distortion_sufficient, check_reframing_complete, generate_suggestions, detect_crisis
+from llm import (
+    stream_chat, check_info_sufficient, extract_distortions,
+    check_distortion_sufficient, check_reframing_complete,
+    check_reframing_stuck, generate_suggestions, detect_crisis,
+)
 from sidebar import SidebarConfig
 
 STYLES = {
@@ -87,16 +91,6 @@ INFO_GATHERING_SUFFIX = """
 조언이나 재구조화는 아직 하지 마. 먼저 충분히 듣는 게 목표야.
 """
 
-REFRAMING_SUFFIX = """
-
-[현재 단계: 인지 재구조화]
-사용자의 상황, 생각, 감정을 충분히 파악했어.
-이제 본격적으로 인지 재구조화를 도와줘:
-- 생각 패턴의 인지 왜곡을 부드럽게 탐색
-- 다른 시각이나 관점 제시
-- 보다 균형잡힌 생각으로 이끌기
-"""
-
 DISTORTION_SUFFIX = """
 
 [현재 단계: 인지왜곡 탐색]
@@ -125,7 +119,6 @@ DISTORTION_SUFFIX = """
   - 질문과 공감을 번갈아 가며 해. 연속으로 두 번 이상 질문하지 마.
   - 답변을 받으면 먼저 충분히 공감하고, 그 다음 필요할 때만 질문해.
   - 가끔은 질문 없이 공감이나 반영으로만 마무리해도 돼.
-    예: "그랬구나. 그 말이 많이 억울했겠다." 처럼 그냥 받아주는 것도 좋아.
   - 사용자가 이미 충분히 말해줬다면 굳이 더 캐묻지 마.
   - 구체적인 부정적 마음을 충분히 꺼낼 수 있도록 도와줘.
   - 틀렸다고 지적하는 게 아니라, 함께 살펴보는 느낌으로.
@@ -149,31 +142,22 @@ REFRAMING_SUFFIX = """
 방법 1. 대안적 설명 찾기
   적합한 왜곡: 과잉일반화, 성급한 판단, 마음읽기
   방법: "이 상황을 설명할 수 있는 다른 가능성이 있다면 3가지 정도 생각해볼 수 있어?"
-        답을 찾으면 "이 중에서 가장 가능성 높은 건 어떤 거야?"로 마무리
 
 방법 2. 객관적 증거 수집
   적합한 왜곡: 감정적 추론, 성급한 판단, 낙인찍기
   방법: "이 생각을 뒷받침하는 진짜 증거가 있어?"
-        그 다음 "반대로, 이 생각과 다른 증거는?"
-        마지막으로 "사실인 것과 그냥 느낌인 것을 구분해볼 수 있어?"
 
 방법 3. 비용/결과 재평가 (탈재앙화)
   적합한 왜곡: 확대와 축소, 재앙화, 흑백 사고
   방법: "정말 그 최악의 결과가 일어난다면 어떻게 될 것 같아?"
-        "그게 일어나더라도 어떻게 대처할 수 있을까?"
-        "10점 만점에 몇 점짜리 나쁜 일이야?"
 
 방법 4. 관점 바꾸기
   적합한 왜곡: 개인화, 부정적 편향, 긍정 축소화
   방법: "친한 친구가 똑같은 일을 겪었다면 뭐라고 말해줄 것 같아?"
-        "그 말을 너 자신에게도 해줄 수 있지 않을까?"
-        "10년 후의 너라면 이 상황을 어떻게 볼 것 같아?"
 
 방법 5. 기적 질문 & 작은 행동
   적합한 왜곡: 해야 한다 진술, 무기력, 부정적 편향
   방법: "오늘 밤 자고 일어났는데 이 문제가 기적처럼 해결됐다면 내일 아침이 어떻게 다를까?"
-        "그 기적을 10%라도 맛보려면 지금 당장 할 수 있는 아주 작은 행동 하나는 뭘까?"
-        "그 행동을 하면 어떤 기분일 것 같아?"
 
 대화 원칙:
   - 단계별로 한 번에 한 가지 질문만.
@@ -183,13 +167,29 @@ REFRAMING_SUFFIX = """
   - 청소년이 이해하기 쉬운 말로. 어려운 심리 용어 금지.
   - 재구조화가 어느 정도 이뤄졌다고 느껴지면 따뜻하게 마무리해줘.
   - 시스템이 완료를 감지하기 전까지는 절대 마무리 멘트를 하지 마.
-    "앞으로 잘 될 거예요", "언제든 다시 이야기해요", "응원할게요" 같은
-    대화를 끝내는 것처럼 들리는 표현은 금지야.
-  - 변화가 느껴져도 계속 대화를 이어가. 작은 변화 하나를 더 구체화하거나
-    실제로 해볼 수 있는 행동을 함께 찾아보는 식으로.
+  - 변화가 느껴져도 계속 대화를 이어가.
+"""
+
+# [NEW] 막힘 감지 시 소프트 완료 유도 suffix
+REFRAMING_STUCK_SUFFIX = """
+
+[추가 지시: 막힘 감지됨]
+사용자가 지금 재구조화에 어려움을 겪고 있어. 억지로 밀어붙이지 마.
+아래 방식으로 자연스럽게 대화를 마무리해줘:
+
+  1. 지금까지 이야기를 꺼내준 것 자체를 충분히 인정하고 격려해.
+     예: "이렇게 힘든 마음을 꺼내줬다는 것만으로도 정말 대단한 거야."
+  2. 바로 바뀌지 않아도 괜찮다는 것을 명확하게 전달해.
+     예: "생각이 한 번에 바뀌지 않는 건 당연해. 그게 자연스러운 거야."
+  3. 오늘 대화에서 있었던 작은 것(감정을 표현한 것, 상황을 설명한 것 등)을 구체적으로 찾아 칭찬해줘.
+  4. 마지막으로 언제든 다시 이야기할 수 있다는 여지를 남겨줘.
+  5. 이 마무리 멘트 이후 추가 질문은 하지 마. 따뜻하게 끝내는 게 목표야.
 """
 
 MOOD_EMOJIS = ["😭", "😢", "😟", "😕", "😐", "🙂", "😊", "😄", "😁", "🤩", "🥳"]
+
+# 재구조화 최대 턴 수 (사용자 발화 기준) — 이 이상이면 강제 소프트 완료
+REFRAMING_MAX_TURNS = 12
 
 CSS = """
 <style>
@@ -197,7 +197,6 @@ CSS = """
 html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
 .stApp { background-color: #f7f9fc; }
 
-/* 채팅 영역 가로 너비 확장 */
 .block-container {
     max-width: 860px !important;
     padding-left: 2rem !important;
@@ -295,7 +294,6 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 }
 .welcome-card b { color: #2c7be5; }
 
-/* ── 요약 확인 카드 ── */
 .summary-card {
     background: linear-gradient(135deg, #f0f9ff 0%, #f0fdf4 100%);
     border: 1.5px solid #7dd3fc;
@@ -322,7 +320,6 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     margin: 10px 0 16px 0; font-size: 0.9rem; color: #475569;
     line-height: 1.7; font-style: italic;
 }
-/* 답변 추천 버튼 */
 .suggest-wrap {
     margin: 6px 0 14px 0;
 }
@@ -339,23 +336,7 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     padding-left: 2px;
     line-height: 1.5;
 }
-.stButton[data-suggest] > button {
-    background: #f8fafc !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 20px !important;
-    font-size: 0.84rem !important;
-    color: #475569 !important;
-    text-align: left !important;
-    padding: 6px 14px !important;
-    transition: all 0.15s !important;
-}
-.stButton[data-suggest] > button:hover {
-    background: #eff6ff !important;
-    border-color: #bfdbfe !important;
-    color: #1d4ed8 !important;
-}
 
-/* 위기 안내 모달 */
 .crisis-modal {
     background: #ffffff;
     border: 2px solid #fca5a5;
@@ -378,7 +359,6 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 }
 .crisis-modal-contact b { color: #b91c1c; font-size: 1rem; }
 
-/* 변화 감지 뱃지 */
 .progress-badge {
     display: inline-flex;
     align-items: center;
@@ -394,7 +374,22 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     animation: fadeIn 0.4s ease both;
 }
 
-/* 대화 완료 카드 */
+/* [NEW] 막힘 안내 뱃지 */
+.stuck-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #92400e;
+    margin: 8px 0 4px 0;
+    animation: fadeIn 0.4s ease both;
+}
+
 .complete-card {
     background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
     border: 2px solid #86efac;
@@ -418,7 +413,26 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     padding-top: 10px; border-top: 1px solid #bbf7d0;
 }
 
-/* 인지왜곡 선택 카드 */
+/* [NEW] 소프트 완료 카드 */
+.soft-complete-card {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 2px solid #fcd34d;
+    border-radius: 20px;
+    padding: 20px 24px;
+    margin: 16px 0 8px 0;
+    text-align: center;
+    animation: scaleIn 0.6s cubic-bezier(0.22,1,0.36,1) both;
+}
+.soft-complete-title { font-size: 1rem; font-weight: 700; color: #92400e; margin-bottom: 6px; }
+.soft-complete-body {
+    font-size: 0.87rem; color: #78350f; line-height: 1.8;
+    background: #ffffff; border-radius: 10px; padding: 12px 16px;
+    margin: 10px 0 8px 0; text-align: left;
+}
+.soft-complete-footer {
+    font-size: 0.82rem; color: #92400e; margin-top: 4px; line-height: 1.6;
+}
+
 .select-card {
     background: #ffffff;
     border: 1.5px solid #ddd6fe;
@@ -443,7 +457,6 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 .select-item-name { font-size: 0.92rem; font-weight: 700; color: #3b0764; margin-bottom: 4px; }
 .select-item-reason { font-size: 0.84rem; color: #4c1d95; line-height: 1.65; }
 
-/* 인지왜곡 결과 카드 */
 .distortion-result {
     background: #ffffff;
     border: 1.5px solid #ddd6fe;
@@ -483,7 +496,6 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
     padding: 6px 10px; font-style: italic;
 }
 
-/* 인지왜곡 인트로 카드 */
 .distortion-intro {
     background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
     border: 1.5px solid #c4b5fd;
@@ -545,24 +557,27 @@ def apply_styles() -> None:
 
 def init_session() -> None:
     defaults = {
-        "intro_done":      False,
-        "survey_done":     False,
-        "style_chosen":    False,
-        "messages":        [],
-        "user_gender":     None,
-        "user_age":        None,
-        "user_mood":       None,
-        "chat_style":      None,
-        # 정보 수집 관련
-        "phase":                    "collecting",   # "collecting" | "confirming" | "distortion" | "selecting" | "reframing"
-        "collected_info":           None,           # check_info_sufficient 결과
-        "distortion_start_messages": 0,             # distortion 단계 진입 시점의 clean 메시지 수
-        "reframing_start_messages":  0,             # reframing 단계 진입 시점의 clean 메시지 수
-        "crisis_count":             0,             # 심각한 위기 발언 누적 횟수
-        "progress_count":            0,             # 재구조화 변화 감지 누적 횟수
-        "crisis_modal_shown":       False,         # 위기 안내창 표시 여부
-        "suggestions":              [],             # 현재 답변 추천 목록
-        "phase":                    "collecting",
+        "intro_done":                False,
+        "survey_done":               False,
+        "style_chosen":              False,
+        "messages":                  [],
+        "user_gender":               None,
+        "user_age":                  None,
+        "user_mood":                 None,
+        "chat_style":                None,
+        "phase":                     "collecting",
+        "collected_info":            None,
+        "distortion_start_messages": 0,
+        "reframing_start_messages":  0,
+        "crisis_count":              0,
+        "progress_count":            0,
+        "crisis_modal_shown":        False,
+        "suggestions":               [],
+        # [NEW] 막힘 감지 및 연구용 메타데이터
+        "stuck_count":               0,       # 연속 막힘 감지 횟수
+        "completion_type":           None,    # "normal" | "soft" | "timeout"
+        "total_turns":               0,       # 전체 사용자 발화 수
+        "reframing_turns":           0,       # reframing 단계 사용자 발화 수
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -668,9 +683,7 @@ def _get_api_key() -> str:
 
 
 def _phase_badge() -> None:
-    """현재 단계 뱃지 표시."""
     phase = st.session_state.get("phase", "collecting")
-
     if phase == "collecting":
         st.markdown(
             "<div class='phase-badge phase-collecting'>💬 어떤 일이 있었는지 들어보는 중이에요</div>",
@@ -718,7 +731,7 @@ def render_history() -> None:
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    # ── 챗봇 메시지 아래 추천 답변 버튼 (가로 배치) ──────────────────────────
+    # ── 추천 답변 버튼 ────────────────────────────────────────────────────────
     phase_now   = st.session_state.get("phase", "collecting")
     suggestions = st.session_state.get("suggestions", [])
     if suggestions and phase_now not in ("confirming", "selecting", "done"):
@@ -734,7 +747,7 @@ def render_history() -> None:
                     st.session_state["suggestions"] = []
                     st.rerun()
 
-    # ── 대화 방향 힌트 ───────────────────────────────────────────────────────
+    # ── 대화 방향 힌트 ────────────────────────────────────────────────────────
     if phase_now not in ("confirming", "selecting", "done"):
         st.markdown(
             "<div class='direction-hint'>"
@@ -743,7 +756,7 @@ def render_history() -> None:
             unsafe_allow_html=True,
         )
 
-    # ── 위기 안내 모달 (누적 3회 이상) ──────────────────────────────────────
+    # ── 위기 안내 모달 ────────────────────────────────────────────────────────
     if st.session_state.get("crisis_modal_shown"):
         st.markdown(
             "<div class='crisis-modal'>"
@@ -768,7 +781,16 @@ def render_history() -> None:
             st.session_state["crisis_modal_shown"] = False
             st.rerun()
 
-    # ── 변화 감지 뱃지 (reframing 단계에서 progress_count 반영) ─────────────
+    # ── [NEW] 막힘 뱃지 ───────────────────────────────────────────────────────
+    if phase_now == "reframing":
+        stuck_cnt = st.session_state.get("stuck_count", 0)
+        if stuck_cnt >= 1:
+            st.markdown(
+                "<div class='stuck-badge'>💛 바로 바뀌지 않아도 괜찮아요. 오늘 이야기해줬다는 것만으로도 충분해요</div>",
+                unsafe_allow_html=True,
+            )
+
+    # ── 변화 감지 뱃지 ────────────────────────────────────────────────────────
     if phase_now == "reframing":
         cnt = st.session_state.get("progress_count", 0)
         if cnt > 0:
@@ -777,30 +799,46 @@ def render_history() -> None:
                 unsafe_allow_html=True,
             )
 
-    # ── 최종 완료 카드 (2회 누적 시) ─────────────────────────────────────────
+    # ── 최종 완료 카드 ────────────────────────────────────────────────────────
     if phase_now == "done":
+        completion_type = st.session_state.get("completion_type", "normal")
         summary = st.session_state.get("reframing_summary", "")
-        st.markdown(
-            "<div class='complete-card'>"
-            "<div class='complete-title'>🌱 오늘 정말 잘 해냈어요!</div>"
-            + (f"<div class='complete-summary'>{summary}</div>" if summary else "")
-            + "<div class='complete-footer'>"
-            "힘든 생각을 꺼내고 함께 살펴봐줘서 고마워요.<br>"
-            "오늘의 작은 변화가 쌓이면 분명 달라질 거예요. 💚"
-            "</div>"
-            "<div class='complete-continue'>"
-            "더 하고 싶은 이야기가 있다면 언제든 입력해도 좋아요."
-            "</div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
+
+        if completion_type == "normal":
+            st.markdown(
+                "<div class='complete-card'>"
+                "<div class='complete-title'>🌱 오늘 정말 잘 해냈어요!</div>"
+                + (f"<div class='complete-summary'>{summary}</div>" if summary else "")
+                + "<div class='complete-footer'>"
+                "힘든 생각을 꺼내고 함께 살펴봐줘서 고마워요.<br>"
+                "오늘의 작은 변화가 쌓이면 분명 달라질 거예요. 💚"
+                "</div>"
+                "<div class='complete-continue'>"
+                "더 하고 싶은 이야기가 있다면 언제든 입력해도 좋아요."
+                "</div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            # soft / timeout 완료
+            st.markdown(
+                "<div class='soft-complete-card'>"
+                "<div class='soft-complete-title'>💛 오늘 이야기해줘서 고마워요</div>"
+                "<div class='soft-complete-body'>"
+                "생각이 바로 바뀌지 않아도 괜찮아요. 그게 오히려 자연스러운 거예요.<br>"
+                "오늘 이렇게 마음을 꺼내준 것만으로도 정말 대단한 일이에요. 🤍"
+                "</div>"
+                "<div class='soft-complete-footer'>"
+                "언제든 다시 이야기하고 싶을 때 찾아와요."
+                "</div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
 
 def render_distortion_select() -> None:
-    """발견된 왜곡 패턴 중 하나를 선택하는 카드."""
     distortions = st.session_state.get("last_distortions", [])
     if not distortions:
-        # 선택지 없으면 바로 재구조화
         st.session_state.phase = "reframing"
         _do_start_reframing(None)
         return
@@ -838,14 +876,12 @@ def render_distortion_select() -> None:
 
 
 def render_summary_confirm(info: dict) -> None:
-    """수집된 정보를 카드로 보여주고 확인/수정 버튼 표시."""
     situation = info.get("situation") or ""
     thought   = info.get("thought")   or ""
     emotion   = info.get("emotion")   or ""
     intensity = info.get("intensity") or ""
     summary   = info.get("summary")   or ""
 
-    # 감정 강도 표시 조합
     emotion_str = emotion
     if intensity and str(intensity).lower() not in ("none", "null", ""):
         emotion_str = f"{emotion} ({intensity})"
@@ -872,7 +908,6 @@ def render_summary_confirm(info: dict) -> None:
         if st.button("✏️ 조금 달라요", use_container_width=True, key="confirm_no"):
             st.session_state.phase          = "collecting"
             st.session_state.collected_info = None
-            # 수정 안내 메시지
             st.session_state.messages.append({
                 "role":    "assistant",
                 "content": "그렇군요! 어떤 부분이 다른지 조금 더 이야기해 주실 수 있나요? 😊",
@@ -881,12 +916,10 @@ def render_summary_confirm(info: dict) -> None:
 
 
 def _call_gpt_once(system: str, trigger: str, max_tokens: int = 600) -> None:
-    """시스템 프롬프트 + 현재 대화 기반으로 챗봇 메시지 한 번 생성 후 저장."""
     api_key = _get_api_key()
     if not api_key:
         st.rerun()
         return
-    # 특수 role(인트로 카드 등)은 OpenAI API에 전달하지 않음
     api_messages = [
         m for m in st.session_state.messages
         if m.get("role") in ("user", "assistant")
@@ -904,7 +937,6 @@ def _call_gpt_once(system: str, trigger: str, max_tokens: int = 600) -> None:
     )
     reply = response.choices[0].message.content
 
-    # [선택방법: ...] 태그 파싱 후 별도 저장, 메시지에서 제거
     import re as _re
     method_match = _re.search(r"\[선택방법:\s*([^\]]+)\]", reply)
     if method_match:
@@ -920,7 +952,6 @@ DISTORTION_INTRO_HTML = (
 )
 
 def _render_distortion_result_html(distortions: list) -> str:
-    """인지왜곡 결과 카드 HTML 생성."""
     if not distortions:
         return ""
     rank_labels = ["1순위", "2순위", "3순위"]
@@ -949,12 +980,9 @@ def _render_distortion_result_html(distortions: list) -> str:
 
 
 def _start_distortion() -> None:
-    """인지왜곡 탐색 시작 — 인트로 카드를 messages에 저장 후 챗봇 첫 메시지 생성."""
-    # 진입 시점의 clean 메시지 수 저장 (이후 4턴 이상 체크에 사용)
     clean_so_far = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
     st.session_state["distortion_start_messages"] = len(clean_so_far)
 
-    # 인트로 카드를 대화 기록 맨 아래에 삽입 (특수 role로 구분)
     st.session_state.messages.append({
         "role":    "__distortion_intro__",
         "content": DISTORTION_INTRO_HTML,
@@ -975,7 +1003,6 @@ def _start_distortion() -> None:
 
 
 def _start_reframing() -> None:
-    """재구조화 준비 — 인지왜곡 추출 후 선택 단계로 전환."""
     api_key = _get_api_key()
     if not api_key:
         return
@@ -988,18 +1015,18 @@ def _start_reframing() -> None:
             "content": result_html,
         })
         st.session_state["last_distortions"] = distortions
-        st.session_state.phase = "selecting"   # 선택 단계로 전환
+        st.session_state.phase = "selecting"
     else:
-        # 왜곡 추출 실패 시 바로 재구조화 시작
         _do_start_reframing(None)
     st.rerun()
 
 
-# 왜곡 유형별 최적 방법 매핑
 def _do_start_reframing(selected: dict | None) -> None:
-    """선택된 왜곡과 대화 맥락을 보고 GPT가 최적 방법 2~3개를 직접 선택해 재구조화 시작."""
     clean_so_far = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
     st.session_state["reframing_start_messages"] = len(clean_so_far)
+    # [NEW] reframing 단계 턴 카운터 초기화
+    st.session_state["reframing_turns"] = 0
+    st.session_state["stuck_count"]     = 0
 
     style = STYLES[st.session_state.chat_style]
     info  = st.session_state.collected_info
@@ -1013,7 +1040,6 @@ def _do_start_reframing(selected: dict | None) -> None:
             f"사용자 발언: {selected.get('quote')}"
         )
 
-    # GPT에게 방법 선택을 맡기되, 선택한 방법을 첫 줄에 명시하도록 요청
     trigger_text = (
         f"[재구조화를 시작해줘.\n"
         f"아래 5가지 방법 중 이 사용자의 왜곡 유형, 상황, 대화 맥락을 고려해서 "
@@ -1030,7 +1056,6 @@ def _do_start_reframing(selected: dict | None) -> None:
         f"[선택방법: 방법N, 방법N]\n"
         f"이 줄은 내부 기록용이므로 사용자에게 자연스럽게 보이지 않게 처리됨.]"
     )
-    # 선택 방법 저장용 초기화
     st.session_state["selected_reframing_methods"] = ""
 
     system = (
@@ -1047,22 +1072,61 @@ def _do_start_reframing(selected: dict | None) -> None:
     _call_gpt_once(system, trigger_text)
 
 
+def _do_soft_complete(reason: str = "stuck") -> None:
+    """
+    [NEW] 소프트 완료 처리.
+    GPT에게 따뜻한 마무리 멘트를 생성시키고 done으로 전환.
+    completion_type을 "soft" 또는 "timeout"으로 기록.
+    """
+    style = STYLES[st.session_state.chat_style]
+    info  = st.session_state.collected_info or {}
+
+    system = (
+        style["prompt"] + REFRAMING_STUCK_SUFFIX
+        + f"\n\n[파악된 사용자 정보]\n"
+        f"상황: {info.get('situation', '')}\n"
+        f"생각: {info.get('thought', '')}\n"
+        f"감정: {info.get('emotion', '')} ({info.get('intensity', '')})\n"
+        f"성별: {st.session_state.user_gender}, 나이: {st.session_state.user_age}세\n"
+    )
+    api_key = _get_api_key()
+    if not api_key:
+        return
+
+    api_messages = [
+        m for m in st.session_state.messages
+        if m.get("role") in ("user", "assistant")
+    ]
+    client   = __import__("openai").OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system},
+            *api_messages,
+            {"role": "user", "content": "[지금 대화를 따뜻하게 마무리해줘.]"},
+        ],
+        temperature=0.7,
+        max_tokens=400,
+    )
+    reply = response.choices[0].message.content
+    st.session_state.messages.append({"role": "assistant", "content": reply})
+
+    # 완료 처리
+    st.session_state.phase           = "done"
+    st.session_state["completion_type"] = "timeout" if reason == "timeout" else "soft"
+    st.session_state["suggestions"]  = []
+    st.rerun()
+
+
 def render_chat_input(config: SidebarConfig) -> None:
-    # user_direction을 session_state에 항상 최신으로 저장 (_call_gpt_once에서도 사용)
     st.session_state["_user_direction"] = getattr(config, "user_direction", "") or ""
 
     phase = st.session_state.get("phase", "collecting")
 
-    # ── 완료 단계: 입력창 유지, 계속 대화 가능 ─────────────────────────────
-    if phase == "done":
-        pass   # 아래 입력창 렌더링으로 계속 진행
-
-    # ── 확인 단계: 입력창 대신 확인 카드 ────────────────────────────────────
     if phase == "confirming":
         render_summary_confirm(st.session_state.get("collected_info", {}))
         return
 
-    # ── 선택 단계: 왜곡 패턴 선택 카드 ──────────────────────────────────────
     if phase == "selecting":
         render_distortion_select()
         return
@@ -1073,7 +1137,6 @@ def render_chat_input(config: SidebarConfig) -> None:
         else "자유롭게 이야기해 주세요"
     )
 
-    # ── 추천 선택 여부 확인 ──────────────────────────────────────────────────
     selected_suggestion = st.session_state.pop("_selected_suggestion", None)
     prompt_to_use = selected_suggestion
 
@@ -1087,143 +1150,167 @@ def render_chat_input(config: SidebarConfig) -> None:
     else:
         return
 
-    if True:
-        api_key = _get_api_key()
-        if not api_key:
-            st.error("⚠️ `.streamlit/secrets.toml`에 OPENAI_API_KEY를 설정해주세요.")
-            st.stop()
+    api_key = _get_api_key()
+    if not api_key:
+        st.error("⚠️ `.streamlit/secrets.toml`에 OPENAI_API_KEY를 설정해주세요.")
+        st.stop()
 
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.session_state["suggestions"] = []   # 입력 시 추천 초기화
-        with st.chat_message("user", avatar="🧑"):
-            st.markdown(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state["suggestions"] = []
+    # [NEW] 전체 턴 카운터 증가
+    st.session_state["total_turns"] = st.session_state.get("total_turns", 0) + 1
 
-        # ── 위기 발언 감지 ────────────────────────────────────────────────────
-        if detect_crisis(api_key, prompt):
-            st.session_state["crisis_count"] = st.session_state.get("crisis_count", 0) + 1
-            if st.session_state["crisis_count"] >= 3:
-                st.session_state["crisis_modal_shown"] = True
-                st.rerun()
+    with st.chat_message("user", avatar="🧑"):
+        st.markdown(prompt)
 
-        # ── 정보 수집 단계: 챗봇 응답 전에 먼저 충분성 체크 ────────────────
-        if phase == "collecting":
-            clean_messages = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-            result = check_info_sufficient(api_key, clean_messages)
+    # ── 위기 발언 감지 ────────────────────────────────────────────────────────
+    if detect_crisis(api_key, prompt):
+        st.session_state["crisis_count"] = st.session_state.get("crisis_count", 0) + 1
+        if st.session_state["crisis_count"] >= 3:
+            st.session_state["crisis_modal_shown"] = True
+            st.rerun()
 
-            if result.get("sufficient"):
-                st.session_state.phase          = "confirming"
-                st.session_state.collected_info = result
-                st.session_state["suggestions"] = []
-                st.rerun()
+    # ── 정보 수집 단계 ────────────────────────────────────────────────────────
+    if phase == "collecting":
+        clean_messages = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+        result = check_info_sufficient(api_key, clean_messages)
 
-            elif result.get("negative") is False:
-                st.session_state["_hint_positive"] = True
+        if result.get("sufficient"):
+            st.session_state.phase          = "confirming"
+            st.session_state.collected_info = result
+            st.session_state["suggestions"] = []
+            st.rerun()
+        elif result.get("negative") is False:
+            st.session_state["_hint_positive"] = True
 
-        # ── 인지왜곡 탐색 단계: 챗봇 응답 전에 충분성 체크 ──────────────────
-        elif phase == "distortion":
-            # distortion 단계 진입 이후 메시지만 카운트 (이전 단계 대화 제외)
-            distortion_msgs = st.session_state.get("distortion_start_messages", 0)
-            all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-            since_distortion = all_clean[distortion_msgs:]
-            if check_distortion_sufficient(api_key, since_distortion):
-                st.session_state.phase = "reframing"
-                st.session_state["suggestions"] = []
-                _start_reframing()
+    # ── 인지왜곡 탐색 단계 ───────────────────────────────────────────────────
+    elif phase == "distortion":
+        distortion_msgs = st.session_state.get("distortion_start_messages", 0)
+        all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+        since_distortion = all_clean[distortion_msgs:]
+        if check_distortion_sufficient(api_key, since_distortion):
+            st.session_state.phase = "reframing"
+            st.session_state["suggestions"] = []
+            _start_reframing()
 
-        style  = STYLES[st.session_state.chat_style]
+    # ── 재구조화 단계: stuck + timeout 체크 ──────────────────────────────────
+    elif phase == "reframing":
+        # [NEW] reframing 단계 턴 카운터 증가
+        st.session_state["reframing_turns"] = st.session_state.get("reframing_turns", 0) + 1
+        reframing_turns = st.session_state["reframing_turns"]
 
-        # 긍정 대화 힌트가 있으면 suffix에 전환 유도 문구 추가
-        if phase == "collecting" and st.session_state.pop("_hint_positive", False):
-            suffix = INFO_GATHERING_SUFFIX + """
+        start_idx   = st.session_state.get("reframing_start_messages", 0)
+        all_clean   = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+        since_reframing = all_clean[start_idx:]
+
+        # 타임아웃: 최대 턴 초과 시 강제 소프트 완료
+        if reframing_turns >= REFRAMING_MAX_TURNS:
+            _do_soft_complete(reason="timeout")
+            return  # 이후 처리 중단
+
+        # stuck 감지 (5턴 이상에서만 작동)
+        stuck_result = check_reframing_stuck(api_key, since_reframing)
+        if stuck_result.get("stuck"):
+            stuck_cnt = st.session_state.get("stuck_count", 0) + 1
+            st.session_state["stuck_count"] = stuck_cnt
+            if stuck_cnt >= 2:
+                # 2회 연속 stuck → 소프트 완료
+                _do_soft_complete(reason="stuck")
+                return
+
+    style  = STYLES[st.session_state.chat_style]
+
+    if phase == "collecting" and st.session_state.pop("_hint_positive", False):
+        suffix = INFO_GATHERING_SUFFIX + """
 
 [추가 지시]
 지금까지 사용자가 즐거웠던 이야기를 해줬어. 충분히 공감하고 기뻐해줘.
 그런 다음, 자연스럽게 "혹시 요즘 힘들거나 속상한 일은 없어?" 같은 식으로
 부드럽게 넘어가봐. 억지스럽지 않게, 대화 흐름에 맞게.
 """
+    else:
+        if phase == "collecting":
+            suffix = INFO_GATHERING_SUFFIX
+        elif phase == "distortion":
+            suffix = DISTORTION_SUFFIX
         else:
-            if phase == "collecting":
-                suffix = INFO_GATHERING_SUFFIX
-            elif phase == "distortion":
-                suffix = DISTORTION_SUFFIX
-            else:
-                suffix = REFRAMING_SUFFIX
+            suffix = REFRAMING_SUFFIX
 
-        # 재구조화 단계면 수집된 정보도 함께 전달
-        extra = ""
-        if phase in ("reframing", "distortion") and st.session_state.collected_info:
-            info  = st.session_state.collected_info
-            extra = (
-                f"\n\n[파악된 사용자 정보]\n"
-                f"상황: {info.get('situation')}\n"
-                f"생각: {info.get('thought')}\n"
-                f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
-            )
-            selected = st.session_state.get("selected_distortion")
-            if phase == "reframing" and selected:
-                extra += (
-                    f"[사용자가 선택한 생각 패턴]\n"
-                    f"유형: {selected.get('type')}\n"
-                    f"이유: {selected.get('reason')}\n"
-                )
-
-        system = (
-            style["prompt"] + suffix + extra
-            + f"\n\n[사용자 기본 정보] 성별: {st.session_state.user_gender}, "
-            f"나이: {st.session_state.user_age}세, 기분 점수: {st.session_state.user_mood}/10"
-            + (f"\n\n[사용자가 원하는 대화 방향]\n{st.session_state.get('_user_direction', '')}" if st.session_state.get("_user_direction") else "")
-        + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
+    extra = ""
+    if phase in ("reframing", "distortion") and st.session_state.collected_info:
+        info  = st.session_state.collected_info
+        extra = (
+            f"\n\n[파악된 사용자 정보]\n"
+            f"상황: {info.get('situation')}\n"
+            f"생각: {info.get('thought')}\n"
+            f"감정: {info.get('emotion')} ({info.get('intensity')})\n"
         )
+        selected = st.session_state.get("selected_distortion")
+        if phase == "reframing" and selected:
+            extra += (
+                f"[사용자가 선택한 생각 패턴]\n"
+                f"유형: {selected.get('type')}\n"
+                f"이유: {selected.get('reason')}\n"
+            )
+        # [NEW] stuck 감지 시 suffix에 추가 힌트 삽입
+        if phase == "reframing" and st.session_state.get("stuck_count", 0) >= 1:
+            suffix += "\n\n[힌트] 사용자가 재구조화에 어려움을 겪고 있는 것 같아. 더 부드럽게 접근하고, 억지로 변화를 끌어내려 하지 마. 오늘 이야기를 꺼내준 것 자체를 충분히 인정해줘."
 
-        with st.chat_message("assistant", avatar=style["avatar"]):
-            placeholder   = st.empty()
-            full_response = ""
-            try:
-                api_messages = [
-                    m for m in st.session_state.messages
-                    if m.get("role") in ("user", "assistant")
-                ]
-                for chunk in stream_chat(
-                    api_key=api_key,
-                    messages=api_messages,
-                    system_prompt=system,
-                    temperature=config.temperature,
-                    max_tokens=config.max_tokens,
-                ):
-                    full_response += chunk
-                    placeholder.markdown(full_response + "▌")
-                placeholder.markdown(full_response)
-            except Exception as e:
-                st.error(f"❌ 오류: {e}")
-                st.stop()
+    system = (
+        style["prompt"] + suffix + extra
+        + f"\n\n[사용자 기본 정보] 성별: {st.session_state.user_gender}, "
+        f"나이: {st.session_state.user_age}세, 기분 점수: {st.session_state.user_mood}/10"
+        + (f"\n\n[사용자가 원하는 대화 방향]\n{st.session_state.get('_user_direction', '')}" if st.session_state.get("_user_direction") else "")
+        + "\n위기 상황(자해·자살 언급) 감지 시 즉시 청소년 전화 1388을 안내해."
+    )
 
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+    with st.chat_message("assistant", avatar=style["avatar"]):
+        placeholder   = st.empty()
+        full_response = ""
+        try:
+            api_messages = [
+                m for m in st.session_state.messages
+                if m.get("role") in ("user", "assistant")
+            ]
+            for chunk in stream_chat(
+                api_key=api_key,
+                messages=api_messages,
+                system_prompt=system,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+            ):
+                full_response += chunk
+                placeholder.markdown(full_response + "▌")
+            placeholder.markdown(full_response)
+        except Exception as e:
+            st.error(f"❌ 오류: {e}")
+            st.stop()
 
-        # ── 재구조화 단계: 완료 여부 체크 ───────────────────────────────────
-        if phase == "reframing":
-            start_idx = st.session_state.get("reframing_start_messages", 0)
-            all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-            since_reframing = all_clean[start_idx:]
-            result = check_reframing_complete(api_key, since_reframing)
-            if result.get("complete"):
-                cnt = st.session_state.get("progress_count", 0) + 1
-                st.session_state["progress_count"] = cnt
-                # 매번 최신 summary 저장
-                st.session_state["reframing_summary"] = result.get("summary", "")
-                if cnt >= 2:
-                    # 2회 누적 → 최종 완료
-                    st.session_state.phase = "done"
-                    st.session_state["suggestions"] = []
-                # 1회 → 뱃지만 표시, 대화 계속
-                st.rerun()
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-        # ── 답변 추천 생성 — 단계 전환 없을 때만 (done/confirming 제외) ──────
-        current_phase = st.session_state.get("phase", "collecting")
-        if current_phase not in ("done", "confirming", "selecting"):
-            clean_for_suggest = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-            suggestions = generate_suggestions(api_key, clean_for_suggest)
-            st.session_state["suggestions"] = suggestions
-        st.rerun()
+    # ── 재구조화 완료 여부 체크 ───────────────────────────────────────────────
+    if phase == "reframing":
+        start_idx = st.session_state.get("reframing_start_messages", 0)
+        all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+        since_reframing = all_clean[start_idx:]
+        result = check_reframing_complete(api_key, since_reframing)
+        if result.get("complete"):
+            cnt = st.session_state.get("progress_count", 0) + 1
+            st.session_state["progress_count"]    = cnt
+            st.session_state["reframing_summary"] = result.get("summary", "")
+            if cnt >= 2:
+                st.session_state.phase              = "done"
+                st.session_state["completion_type"] = "normal"  # [NEW]
+                st.session_state["suggestions"]     = []
+            st.rerun()
+
+    # ── 답변 추천 생성 ────────────────────────────────────────────────────────
+    current_phase = st.session_state.get("phase", "collecting")
+    if current_phase not in ("done", "confirming", "selecting"):
+        clean_for_suggest = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+        suggestions = generate_suggestions(api_key, clean_for_suggest)
+        st.session_state["suggestions"] = suggestions
+    st.rerun()
 
 
 def render_main(config: SidebarConfig) -> None:
