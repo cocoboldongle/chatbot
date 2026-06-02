@@ -181,6 +181,9 @@ def _build_txt(messages: list, profile: dict, mask: bool = False, api_key: str =
         f"전체 턴 수      : {profile.get('total_turns', '-')}",
         f"재구조화 턴 수  : {profile.get('reframing_turns', '-')}",
         f"막힘 감지 횟수  : {profile.get('stuck_count', '-')}",
+        f"수집된 상황     : {profile.get('situation', '-')}",
+        f"수집된 생각     : {profile.get('thought', '-')}",
+        f"수집된 감정     : {profile.get('emotion', '-')} ({profile.get('intensity', '-')})",
         f"발견된 왜곡 1순위: {profile.get('distortion_1', '-')}",
         f"발견된 왜곡 2순위: {profile.get('distortion_2', '-')}",
         f"발견된 왜곡 3순위: {profile.get('distortion_3', '-')}",
@@ -251,6 +254,10 @@ def _save_to_supabase(messages: list, profile: dict, mask: bool, api_key: str) -
             "distortion_2":       profile.get("distortion_2", "-"),
             "distortion_3":       profile.get("distortion_3", "-"),
             "selected_distortion":profile.get("selected_distortion_type", "-"),
+            "situation":          profile.get("situation", "-"),
+            "thought":            profile.get("thought", "-"),
+            "emotion":            profile.get("emotion", "-"),
+            "intensity":          profile.get("intensity", "-"),
             "privacy_masked":     mask,
             "messages":           masked,
         }
@@ -437,6 +444,11 @@ def render_sidebar() -> SidebarConfig:
             "distortion_2":      _get_distortion_label(st.session_state.get("last_distortions", []), 1),
             "distortion_3":      _get_distortion_label(st.session_state.get("last_distortions", []), 2),
             "selected_distortion_type": (st.session_state.get("selected_distortion") or {}).get("type", "-"),
+            # 정보 수집 결과
+            "situation":   (st.session_state.get("collected_info") or {}).get("situation", "-"),
+            "thought":     (st.session_state.get("collected_info") or {}).get("thought", "-"),
+            "emotion":     (st.session_state.get("collected_info") or {}).get("emotion", "-"),
+            "intensity":   (st.session_state.get("collected_info") or {}).get("intensity", "-"),
         }
         fname = datetime.datetime.now().strftime("마음다시보기_%Y%m%d_%H%M")
 
