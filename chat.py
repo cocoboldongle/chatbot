@@ -1193,30 +1193,15 @@ def render_chat_input(config: SidebarConfig) -> None:
             st.session_state["suggestions"] = []
             _start_reframing()
 
-    # ── 재구조화 단계: stuck + timeout 체크 ──────────────────────────────────
+    # ── 재구조화 단계: 턴 카운터 + 타임아웃 선체크 ──────────────────────────
     elif phase == "reframing":
-        # [NEW] reframing 단계 턴 카운터 증가
         st.session_state["reframing_turns"] = st.session_state.get("reframing_turns", 0) + 1
         reframing_turns = st.session_state["reframing_turns"]
 
-        start_idx   = st.session_state.get("reframing_start_messages", 0)
-        all_clean   = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-        since_reframing = all_clean[start_idx:]
-
-        # 타임아웃: 최대 턴 초과 시 강제 소프트 완료
+        # 타임아웃: GPT 응답 전에 최대 턴 초과 여부만 먼저 체크
         if reframing_turns >= REFRAMING_MAX_TURNS:
             _do_soft_complete(reason="timeout")
-            return  # 이후 처리 중단
-
-        # stuck 감지 (5턴 이상에서만 작동)
-        stuck_result = check_reframing_stuck(api_key, since_reframing)
-        if stuck_result.get("stuck"):
-            stuck_cnt = st.session_state.get("stuck_count", 0) + 1
-            st.session_state["stuck_count"] = stuck_cnt
-            if stuck_cnt >= 2:
-                # 2회 연속 stuck → 소프트 완료
-                _do_soft_complete(reason="stuck")
-                return
+            return
 
     style  = STYLES[st.session_state.chat_style]
 
@@ -1288,11 +1273,13 @@ def render_chat_input(config: SidebarConfig) -> None:
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-    # ── 재구조화 완료 여부 체크 ───────────────────────────────────────────────
+    # ── 재구조화: 완료 체크 → stuck 체크 (GPT 응답 생성 후) ─────────────────
     if phase == "reframing":
         start_idx = st.session_state.get("reframing_start_messages", 0)
         all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
         since_reframing = all_clean[start_idx:]
+
+        # 1) 정상 완료 체크
         result = check_reframing_complete(api_key, since_reframing)
         if result.get("complete"):
             cnt = st.session_state.get("progress_count", 0) + 1
@@ -1300,9 +1287,22 @@ def render_chat_input(config: SidebarConfig) -> None:
             st.session_state["reframing_summary"] = result.get("summary", "")
             if cnt >= 2:
                 st.session_state.phase              = "done"
-                st.session_state["completion_type"] = "normal"  # [NEW]
+                st.session_state["completion_type"] = "normal"
                 st.session_state["suggestions"]     = []
             st.rerun()
+
+        # 2) stuck 체크 — 정상 완료 아닐 때만, 5턴 이상부터 작동
+        stuck_result = check_reframing_stuck(api_key, since_reframing)
+        if stuck_result.get("stuck"):
+            stuck_cnt = st.session_state.get("stuck_count", 0) + 1
+            st.session_state["stuck_count"] = stuck_cnt
+            if stuck_cnt >= 2:
+                # 2회 연속 stuck → 소프트 완료 (마무리 멘트 생성 후 done)
+                _do_soft_complete(reason="stuck")
+                return
+        else:
+            # stuck 아니면 카운터 리셋 (연속성 체크)
+            st.session_state["stuck_count"] = 0
 
     # ── 답변 추천 생성 ────────────────────────────────────────────────────────
     current_phase = st.session_state.get("phase", "collecting")
