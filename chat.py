@@ -1291,18 +1291,19 @@ def render_chat_input(config: SidebarConfig) -> None:
                 st.session_state["suggestions"]     = []
             st.rerun()
 
-        # 2) stuck 체크 — 정상 완료 아닐 때만, 5턴 이상부터 작동
-        stuck_result = check_reframing_stuck(api_key, since_reframing)
-        if stuck_result.get("stuck"):
-            stuck_cnt = st.session_state.get("stuck_count", 0) + 1
-            st.session_state["stuck_count"] = stuck_cnt
-            if stuck_cnt >= 2:
-                # 2회 연속 stuck → 소프트 완료 (마무리 멘트 생성 후 done)
-                _do_soft_complete(reason="stuck")
-                return
-        else:
-            # stuck 아니면 카운터 리셋 (연속성 체크)
-            st.session_state["stuck_count"] = 0
+        # 2) stuck 체크 — 정상 완료 아닐 때만, 3턴 이상부터 작동
+        if st.session_state.get("reframing_turns", 0) >= 3:
+            stuck_result = check_reframing_stuck(api_key, since_reframing)
+            if stuck_result.get("stuck"):
+                stuck_cnt = st.session_state.get("stuck_count", 0) + 1
+                st.session_state["stuck_count"] = stuck_cnt
+                if stuck_cnt >= 2:
+                    # 2회 연속 stuck → 소프트 완료 (마무리 멘트 생성 후 done)
+                    _do_soft_complete(reason="stuck")
+                    return
+            else:
+                # stuck 아니면 카운터 리셋 (연속성 체크)
+                st.session_state["stuck_count"] = 0
 
     # ── 답변 추천 생성 ────────────────────────────────────────────────────────
     current_phase = st.session_state.get("phase", "collecting")
