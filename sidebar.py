@@ -222,7 +222,7 @@ def _save_to_supabase(messages: list, profile: dict, mask: bool, api_key: str) -
         }
 
         resp = requests.post(
-            f"{url}/rest/v1/chat_logs",
+            f"{url}/rest/v1/chatbot0602",
             headers={
                 "apikey":        key,
                 "Authorization": f"Bearer {key}",
