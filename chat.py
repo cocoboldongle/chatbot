@@ -1168,6 +1168,7 @@ def render_chat_input(config: SidebarConfig) -> None:
         st.session_state["crisis_count"] = st.session_state.get("crisis_count", 0) + 1
         if st.session_state["crisis_count"] >= 3:
             st.session_state["crisis_modal_shown"] = True
+            st.session_state["crisis_count"] = 0   # 모달 표시 후 카운터 리셋 (매 턴 반복 방지)
             st.rerun()
 
     # ── 정보 수집 단계 ────────────────────────────────────────────────────────
