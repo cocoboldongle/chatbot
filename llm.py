@@ -327,7 +327,7 @@ def check_reframing_stuck(
     반환: {"stuck": bool, "reason": str|None}
     """
     user_msgs = [m for m in messages if m.get("role") == "user"]
-    if len(user_msgs) < 5:
+    if len(user_msgs) < 3:
         return {"stuck": False}
 
     client   = OpenAI(api_key=api_key)
