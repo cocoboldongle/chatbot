@@ -15,6 +15,26 @@ STYLE_LABELS = {
     "coach":     "🧘 차분한 코치형",
 }
 
+
+REFRAMING_METHOD_LABELS = {
+    "방법1":  "대안적 설명 찾기",
+    "방법2":  "객관적 증거 수집",
+    "방법3":  "비용/결과 재평가",
+    "방법4":  "관점 바꾸기",
+    "방법5":  "기적 질문 & 작은 행동",
+    "방법 1": "대안적 설명 찾기",
+    "방법 2": "객관적 증거 수집",
+    "방법 3": "비용/결과 재평가",
+    "방법 4": "관점 바꾸기",
+    "방법 5": "기적 질문 & 작은 행동",
+}
+
+def _format_reframing_methods(raw: str) -> str:
+    if not raw or raw == "-":
+        return "-"
+    parts = [p.strip() for p in raw.replace("，", ",").split(",")]
+    return ", ".join(REFRAMING_METHOD_LABELS.get(p, p) for p in parts)
+
 MOOD_EMOJIS = ["😭","😢","😟","😕","😐","🙂","😊","😄","😁","🤩","🥳"]
 
 SIDEBAR_CSS = """
@@ -321,7 +341,7 @@ def render_sidebar() -> SidebarConfig:
             total_turns      = st.session_state.get("total_turns", 0)
             reframing_turns  = st.session_state.get("reframing_turns", 0)
             stuck_count      = st.session_state.get("stuck_count", 0)
-            reframing_method = st.session_state.get("selected_reframing_methods") or "-"
+            reframing_method = _format_reframing_methods(st.session_state.get("selected_reframing_methods") or "-")
             progress_count   = st.session_state.get("progress_count", 0)
 
             type_color = {
@@ -383,7 +403,7 @@ def render_sidebar() -> SidebarConfig:
             "age":               st.session_state.get("user_age", "-"),
             "mood":              st.session_state.get("user_mood", "-"),
             "style_label":       STYLE_LABELS.get(st.session_state.get("chat_style", ""), "-"),
-            "reframing_methods": st.session_state.get("selected_reframing_methods", "-"),
+            "reframing_methods": _format_reframing_methods(st.session_state.get("selected_reframing_methods", "-")),
             # [NEW]
             "completion_type":   st.session_state.get("completion_type", "-"),
             "total_turns":       st.session_state.get("total_turns", 0),
