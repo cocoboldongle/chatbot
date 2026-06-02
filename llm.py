@@ -202,9 +202,8 @@ def check_distortion_sufficient(
 ) -> bool:
     """
     인지왜곡 탐색이 충분히 됐는지 판단.
-    distortion 단계의 사용자 메시지 4개 미만이면 무조건 False.
+    distortion 단계 이후 메시지 기준으로 사용자 메시지 4개 미만이면 무조건 False.
     """
-    # distortion 단계 이후 메시지 기준으로 사용자 메시지 4개 미만이면 False
     user_msgs = [m for m in messages if m.get("role") == "user"]
     if len(user_msgs) < 4:
         return False
@@ -290,6 +289,66 @@ def check_reframing_complete(
         return {"complete": False}
 
 
+# ── [NEW] 재구조화 막힘 감지 ───────────────────────────────────────────────────
+
+REFRAMING_STUCK_PROMPT = """
+너는 인지행동치료 전문가야. 아래 재구조화 단계의 대화를 분석하고 JSON만 반환해. 다른 말은 절대 하지 마.
+
+[판단 목표]
+사용자가 재구조화에 저항하거나 변화 없이 같은 부정적 생각을 반복하고 있는지 판단해.
+
+stuck: true 조건 — 아래 중 2가지 이상이 해당하면 true:
+  1. 최근 3~4턴 동안 사용자가 같은 부정적 생각이나 감정을 반복했는가
+     (예: "그냥 다 싫어요", "몰라요", "어차피 안 될 거예요"가 반복)
+  2. 챗봇의 관점 전환 시도에 사용자가 계속 부정적으로 반응하거나 회피했는가
+     (예: "그래도 소용없어요", "그렇게 생각 안 되는데요")
+  3. 사용자가 단답("응", "몰라", "그냥요", "싫어요")만 반복하고 대화를 확장하지 않는가
+  4. 사용자가 명시적으로 대화를 거부하거나 포기 의사를 표현했는가
+
+stuck: false 조건:
+  - 느리더라도 조금씩 반응이 달라지고 있는 경우
+  - 부정적이지만 이유를 설명하거나 대화를 이어가고 있는 경우
+  - 아직 대화 초반이라 판단하기 이른 경우
+
+반환 형식 (JSON만):
+{"stuck": true, "reason": "막힘 이유 한 줄 요약 (내부 기록용)"}
+{"stuck": false}
+"""
+
+
+def check_reframing_stuck(
+    api_key: str,
+    messages: list[dict],
+    model: str = "gpt-4o",
+) -> dict:
+    """
+    재구조화 단계에서 사용자가 막혀 있는지 판단.
+    reframing 단계 사용자 메시지 5개 미만이면 무조건 False (너무 일찍 판단하지 않도록).
+    반환: {"stuck": bool, "reason": str|None}
+    """
+    user_msgs = [m for m in messages if m.get("role") == "user"]
+    if len(user_msgs) < 5:
+        return {"stuck": False}
+
+    client   = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": REFRAMING_STUCK_PROMPT},
+            {"role": "user",   "content": str(messages)},
+        ],
+        temperature=0,
+        max_tokens=100,
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        return json.loads(raw[start:end])
+    except Exception:
+        return {"stuck": False}
+
+
 # ── 답변 추천 생성 ─────────────────────────────────────────────────────────────
 
 SUGGEST_PROMPT = """
@@ -327,7 +386,7 @@ def generate_suggestions(
         model=model,
         messages=[
             {"role": "system", "content": SUGGEST_PROMPT},
-            {"role": "user",   "content": str(clean[-6:])},  # 최근 6개 메시지만
+            {"role": "user",   "content": str(clean[-6:])},
         ],
         temperature=0.9,
         max_tokens=200,
@@ -442,7 +501,7 @@ def mask_personal_info(
             {"role": "user",   "content": text},
         ],
         temperature=0,
-        max_tokens=len(text) * 3,  # 원본보다 길어질 수 없음
+        max_tokens=len(text) * 3,
     )
     raw = response.choices[0].message.content.strip()
     try:
