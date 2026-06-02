@@ -353,50 +353,74 @@ def render_sidebar() -> SidebarConfig:
                 unsafe_allow_html=True,
             )
 
-        # ── [NEW] 연구용 메타데이터 패널 ──────────────────────────
+        # ── 연구용 메타데이터 패널 (비밀번호 잠금) ───────────────
         if st.session_state.get("style_chosen"):
             st.divider()
-            st.caption("📊 세션 현황")
-
-            completion_type  = st.session_state.get("completion_type") or "-"
-            total_turns      = st.session_state.get("total_turns", 0)
-            reframing_turns  = st.session_state.get("reframing_turns", 0)
-            stuck_count      = st.session_state.get("stuck_count", 0)
-            reframing_method = _format_reframing_methods(st.session_state.get("selected_reframing_methods") or "-")
-            progress_count   = st.session_state.get("progress_count", 0)
-
-            type_color = {
-                "normal":  "meta-normal",
-                "soft":    "meta-soft",
-                "timeout": "meta-timeout",
-            }.get(completion_type, "")
-
-            st.markdown(
-                f"<div class='meta-card'>"
-                f"<div class='meta-row'><span class='meta-label'>완료 유형</span>"
-                f"<span class='meta-value {type_color}'>{completion_type}</span></div>"
-                f"<div class='meta-row'><span class='meta-label'>전체 턴</span>"
-                f"<span class='meta-value'>{total_turns}</span></div>"
-                f"<div class='meta-row'><span class='meta-label'>재구조화 턴</span>"
-                f"<span class='meta-value'>{reframing_turns}</span></div>"
-                f"<div class='meta-row'><span class='meta-label'>변화 감지</span>"
-                f"<span class='meta-value'>{progress_count}회</span></div>"
-                f"<div class='meta-row'><span class='meta-label'>막힘 감지</span>"
-                f"<span class='meta-value'>{stuck_count}회</span></div>"
-                f"<div class='meta-row'><span class='meta-label'>재구조화 방법</span>"
-                f"<span class='meta-value'>{reframing_method}</span></div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-            # 왜곡 디버그 표시
-            last_d = st.session_state.get("last_distortions", [])
-            sel_d  = (st.session_state.get("selected_distortion") or {}).get("type", "-")
-            if last_d or sel_d != "-":
-                d_labels = [d.get("type", "-") for d in last_d[:3]]
-                st.caption(
-                    "🧩 왜곡: " + " / ".join(d_labels) + "\n"
-                    + "✅ 선택: " + sel_d
+            with st.expander("📊 세션 현황", expanded=False):
+                meta_pw = st.text_input(
+                    "비밀번호", type="password",
+                    placeholder="비밀번호를 입력하세요",
+                    key="meta_pw"
                 )
+                if meta_pw == "1234":
+                    completion_type  = st.session_state.get("completion_type") or "-"
+                    total_turns      = st.session_state.get("total_turns", 0)
+                    reframing_turns  = st.session_state.get("reframing_turns", 0)
+                    stuck_count      = st.session_state.get("stuck_count", 0)
+                    reframing_method = _format_reframing_methods(st.session_state.get("selected_reframing_methods") or "-")
+                    progress_count   = st.session_state.get("progress_count", 0)
+                    last_d           = st.session_state.get("last_distortions", [])
+                    sel_d            = (st.session_state.get("selected_distortion") or {}).get("type", "-")
+                    d_labels         = [d.get("type", "-") for d in last_d[:3]]
+                    collected        = st.session_state.get("collected_info") or {}
+
+                    type_color = {
+                        "normal":  "meta-normal",
+                        "soft":    "meta-soft",
+                        "timeout": "meta-timeout",
+                    }.get(completion_type, "")
+
+                    # 왜곡 순위 행 생성
+                    distortion_rows = ""
+                    for i, label in enumerate(d_labels):
+                        distortion_rows += (
+                            f"<div class='meta-row'><span class='meta-label'>왜곡 {i+1}순위</span>"
+                            f"<span class='meta-value'>{label}</span></div>"
+                        )
+                    if not d_labels:
+                        distortion_rows = (
+                            "<div class='meta-row'><span class='meta-label'>왜곡</span>"
+                            "<span class='meta-value'>-</span></div>"
+                        )
+
+                    st.markdown(
+                        f"<div class='meta-card'>"
+                        f"<div class='meta-row'><span class='meta-label'>완료 유형</span>"
+                        f"<span class='meta-value {type_color}'>{completion_type}</span></div>"
+                        f"<div class='meta-row'><span class='meta-label'>전체 턴</span>"
+                        f"<span class='meta-value'>{total_turns}</span></div>"
+                        f"<div class='meta-row'><span class='meta-label'>재구조화 턴</span>"
+                        f"<span class='meta-value'>{reframing_turns}</span></div>"
+                        f"<div class='meta-row'><span class='meta-label'>변화 감지</span>"
+                        f"<span class='meta-value'>{progress_count}회</span></div>"
+                        f"<div class='meta-row'><span class='meta-label'>막힘 감지</span>"
+                        f"<span class='meta-value'>{stuck_count}회</span></div>"
+                        f"<div class='meta-row'><span class='meta-label'>재구조화 방법</span>"
+                        f"<span class='meta-value'>{reframing_method}</span></div>"
+                        + distortion_rows +
+                        f"<div class='meta-row'><span class='meta-label'>선택 왜곡</span>"
+                        f"<span class='meta-value'>{sel_d}</span></div>"
+                        f"<div class='meta-row'><span class='meta-label'>상황</span>"
+                        f"<span class='meta-value'>{collected.get('situation', '-')}</span></div>"
+                        f"<div class='meta-row'><span class='meta-label'>생각</span>"
+                        f"<span class='meta-value'>{collected.get('thought', '-')}</span></div>"
+                        f"<div class='meta-row'><span class='meta-label'>감정</span>"
+                        f"<span class='meta-value'>{collected.get('emotion', '-')} ({collected.get('intensity', '-')})</span></div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                elif meta_pw:
+                    st.caption("❌ 비밀번호가 틀렸어요.")
 
         st.divider()
 
