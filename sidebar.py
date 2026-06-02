@@ -35,6 +35,12 @@ def _format_reframing_methods(raw: str) -> str:
     parts = [p.strip() for p in raw.replace("，", ",").split(",")]
     return ", ".join(REFRAMING_METHOD_LABELS.get(p, p) for p in parts)
 
+def _get_distortion_label(distortions: list, idx: int) -> str:
+    """last_distortions 리스트에서 idx번째 왜곡 이름 반환. 없으면 '-'."""
+    if not distortions or idx >= len(distortions):
+        return "-"
+    return distortions[idx].get("type", "-")
+
 MOOD_EMOJIS = ["😭","😢","😟","😕","😐","🙂","😊","😄","😁","🤩","🥳"]
 
 SIDEBAR_CSS = """
@@ -175,7 +181,11 @@ def _build_txt(messages: list, profile: dict, mask: bool = False, api_key: str =
         f"전체 턴 수      : {profile.get('total_turns', '-')}",
         f"재구조화 턴 수  : {profile.get('reframing_turns', '-')}",
         f"막힘 감지 횟수  : {profile.get('stuck_count', '-')}",
-        f"개인정보 마스킹 : {'적용됨' if mask else '미적용'}",
+        f"발견된 왜곡 1순위: {profile.get('distortion_1', '-')}",
+        f"발견된 왜곡 2순위: {profile.get('distortion_2', '-')}",
+        f"발견된 왜곡 3순위: {profile.get('distortion_3', '-')}",
+        f"선택한 왜곡      : {profile.get('selected_distortion_type', '-')}",
+        f"개인정보 마스킹  : {'적용됨' if mask else '미적용'}",
         "───────────────────────────────────",
         "",
     ]
@@ -237,6 +247,10 @@ def _save_to_supabase(messages: list, profile: dict, mask: bool, api_key: str) -
             "total_turns":        profile.get("total_turns", 0),
             "reframing_turns":    profile.get("reframing_turns", 0),
             "stuck_count":        profile.get("stuck_count", 0),
+            "distortion_1":       profile.get("distortion_1", "-"),
+            "distortion_2":       profile.get("distortion_2", "-"),
+            "distortion_3":       profile.get("distortion_3", "-"),
+            "selected_distortion":profile.get("selected_distortion_type", "-"),
             "privacy_masked":     mask,
             "messages":           masked,
         }
@@ -409,6 +423,11 @@ def render_sidebar() -> SidebarConfig:
             "total_turns":       st.session_state.get("total_turns", 0),
             "reframing_turns":   st.session_state.get("reframing_turns", 0),
             "stuck_count":       st.session_state.get("stuck_count", 0),
+            # 발견된 왜곡 1~3순위 및 선택한 왜곡
+            "distortion_1":      _get_distortion_label(st.session_state.get("last_distortions", []), 0),
+            "distortion_2":      _get_distortion_label(st.session_state.get("last_distortions", []), 1),
+            "distortion_3":      _get_distortion_label(st.session_state.get("last_distortions", []), 2),
+            "selected_distortion_type": (st.session_state.get("selected_distortion") or {}).get("type", "-"),
         }
         fname = datetime.datetime.now().strftime("마음다시보기_%Y%m%d_%H%M")
 
@@ -457,7 +476,28 @@ def render_sidebar() -> SidebarConfig:
 
         # ── 액션 버튼 ──────────────────────────────────────────────
         if st.button("🗑️ 대화 초기화", use_container_width=True):
-            st.session_state.messages = []
+            # 메시지 + 연구용 메타데이터 전체 리셋
+            reset_keys = {
+                "messages":                  [],
+                "phase":                     "collecting",
+                "collected_info":            None,
+                "distortion_start_messages": 0,
+                "reframing_start_messages":  0,
+                "crisis_count":              0,
+                "progress_count":            0,
+                "crisis_modal_shown":        False,
+                "suggestions":               [],
+                "stuck_count":               0,
+                "completion_type":           None,
+                "total_turns":               0,
+                "reframing_turns":           0,
+                "selected_reframing_methods": "",
+                "selected_distortion":       None,
+                "last_distortions":          [],
+                "reframing_summary":         "",
+            }
+            for k, v in reset_keys.items():
+                st.session_state[k] = v
             st.rerun()
 
         if st.session_state.get("style_chosen"):
