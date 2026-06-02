@@ -19,7 +19,6 @@ MOOD_EMOJIS = ["😭","😢","😟","😕","😐","🙂","😊","😄","😁","�
 
 SIDEBAR_CSS = """
 <style>
-/* 프로필 카드 */
 .profile-card {
     background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
     border: 1px solid #dbeafe;
@@ -46,8 +45,6 @@ SIDEBAR_CSS = """
     color: #1e293b;
     font-size: 0.85rem;
 }
-
-/* 스타일 배지 */
 .style-badge {
     display: inline-flex;
     align-items: center;
@@ -63,8 +60,6 @@ SIDEBAR_CSS = """
     width: 100%;
     box-sizing: border-box;
 }
-
-/* 진행 단계 표시 */
 .progress-wrap {
     display: flex;
     flex-direction: column;
@@ -97,7 +92,29 @@ SIDEBAR_CSS = """
 .progress-step.active .progress-dot { background: #3b82f6; }
 .progress-step.done  .progress-dot { background: #4ade80; }
 
-/* 다운로드 버튼 커스텀 */
+/* [NEW] 연구 메타 카드 */
+.meta-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 4px;
+    font-size: 0.78rem;
+    color: #64748b;
+    line-height: 1.9;
+}
+.meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.meta-label { color: #94a3b8; }
+.meta-value { font-weight: 600; color: #334155; }
+/* completion_type 색상 */
+.meta-normal  { color: #15803d; }
+.meta-soft    { color: #92400e; }
+.meta-timeout { color: #b91c1c; }
+
 .stDownloadButton > button {
     width: 100%;
     background-color: #f8fafc !important;
@@ -119,23 +136,26 @@ class SidebarConfig:
     temperature: float
     max_tokens: int
     system_prompt: str
-    user_direction: str   # 사용자가 원하는 대화 방향
+    user_direction: str
 
 
 def _build_txt(messages: list, profile: dict, mask: bool = False, api_key: str = "") -> str:
-    """대화 내용을 텍스트로 변환. mask=True 시 사용자 메시지 개인정보 마스킹."""
     now   = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     lines = [
         "═══════════════════════════════════",
         "       🌱 마음 다시 보기 — 대화 기록",
         "═══════════════════════════════════",
-        f"저장 일시  : {now}",
-        f"성별       : {profile.get('gender', '-')}",
-        f"나이       : {profile.get('age', '-')}세",
-        f"기분 점수  : {profile.get('mood', '-')}/10",
-        f"대화 스타일: {profile.get('style_label', '-')}",
-        f"재구조화 방법: {profile.get('reframing_methods', '-')}",
-        f"개인정보 마스킹: {'적용됨' if mask else '미적용'}",
+        f"저장 일시       : {now}",
+        f"성별            : {profile.get('gender', '-')}",
+        f"나이            : {profile.get('age', '-')}세",
+        f"기분 점수       : {profile.get('mood', '-')}/10",
+        f"대화 스타일     : {profile.get('style_label', '-')}",
+        f"재구조화 방법   : {profile.get('reframing_methods', '-')}",
+        f"완료 유형       : {profile.get('completion_type', '-')}",
+        f"전체 턴 수      : {profile.get('total_turns', '-')}",
+        f"재구조화 턴 수  : {profile.get('reframing_turns', '-')}",
+        f"막힘 감지 횟수  : {profile.get('stuck_count', '-')}",
+        f"개인정보 마스킹 : {'적용됨' if mask else '미적용'}",
         "───────────────────────────────────",
         "",
     ]
@@ -152,7 +172,6 @@ def _build_txt(messages: list, profile: dict, mask: bool = False, api_key: str =
 
 
 def _build_json(messages: list, profile: dict, mask: bool = False, api_key: str = "") -> str:
-    """대화 내용을 JSON으로 변환. mask=True 시 사용자 메시지 개인정보 마스킹."""
     masked_messages = []
     for msg in messages:
         m = dict(msg)
@@ -160,23 +179,21 @@ def _build_json(messages: list, profile: dict, mask: bool = False, api_key: str 
             m["content"] = mask_personal_info(api_key, m["content"])
         masked_messages.append(m)
     data = {
-        "exported_at": datetime.datetime.now().isoformat(),
-        "privacy_masked": mask,
-        "profile": profile,
-        "messages": masked_messages,
+        "exported_at":     datetime.datetime.now().isoformat(),
+        "privacy_masked":  mask,
+        "profile":         profile,
+        "messages":        masked_messages,
     }
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
 def _save_to_supabase(messages: list, profile: dict, mask: bool, api_key: str) -> bool:
-    """대화 데이터를 Supabase에 저장. 성공 시 True 반환."""
     try:
         url = st.secrets.get("SUPABASE_URL", "")
         key = st.secrets.get("SUPABASE_KEY", "")
         if not url or not key:
             return False
 
-        # 마스킹 적용된 메시지 준비
         clean_messages = [m for m in messages if m.get("role") in ("user", "assistant")]
         if mask and api_key:
             from llm import mask_personal_info as _mask
@@ -190,13 +207,18 @@ def _save_to_supabase(messages: list, profile: dict, mask: bool, api_key: str) -
             masked = clean_messages
 
         payload = {
-            "gender":            profile.get("gender", "-"),
-            "age":               profile.get("age"),
-            "mood":              profile.get("mood"),
-            "chat_style":        profile.get("style_label", "-"),
-            "reframing_methods": profile.get("reframing_methods", "-"),
-            "privacy_masked":    mask,
-            "messages":          masked,
+            "gender":             profile.get("gender", "-"),
+            "age":                profile.get("age"),
+            "mood":               profile.get("mood"),
+            "chat_style":         profile.get("style_label", "-"),
+            "reframing_methods":  profile.get("reframing_methods", "-"),
+            # [NEW] 연구용 메타데이터
+            "completion_type":    profile.get("completion_type", "-"),
+            "total_turns":        profile.get("total_turns", 0),
+            "reframing_turns":    profile.get("reframing_turns", 0),
+            "stuck_count":        profile.get("stuck_count", 0),
+            "privacy_masked":     mask,
+            "messages":           masked,
         }
 
         resp = requests.post(
@@ -225,7 +247,7 @@ def render_sidebar() -> SidebarConfig:
         st.caption("인지 재구조화 챗봇")
         st.divider()
 
-        # ── 사용자 프로필 (설문 완료 후 표시) ──────────────────
+        # ── 사용자 프로필 ─────────────────────────────────────────
         if st.session_state.get("survey_done"):
             st.divider()
             gender     = st.session_state.get("user_gender", "-")
@@ -245,7 +267,7 @@ def render_sidebar() -> SidebarConfig:
                 unsafe_allow_html=True,
             )
 
-        # ── 현재 대화 스타일 (스타일 선택 후 표시) ────────────
+        # ── 대화 스타일 ────────────────────────────────────────────
         if st.session_state.get("style_chosen"):
             style_key   = st.session_state.get("chat_style", "")
             style_label = STYLE_LABELS.get(style_key, "")
@@ -254,7 +276,7 @@ def render_sidebar() -> SidebarConfig:
                 unsafe_allow_html=True,
             )
 
-        # ── 진행 단계 (채팅 시작 후 표시) ──────────────────────
+        # ── 진행 단계 ──────────────────────────────────────────────
         phase = st.session_state.get("phase", "")
         if phase:
             st.divider()
@@ -274,14 +296,11 @@ def render_sidebar() -> SidebarConfig:
             rows = []
             for i, (key, label) in enumerate(STEPS):
                 if i < current_idx:
-                    cls = "done"
-                    icon = "✓"
+                    cls = "done"; icon = "✓"
                 elif i == current_idx:
-                    cls = "active"
-                    icon = "▶"
+                    cls = "active"; icon = "▶"
                 else:
-                    cls = ""
-                    icon = " "
+                    cls = ""; icon = " "
                 rows.append(
                     f"<div class='progress-step {cls}'>"
                     f"<div class='progress-dot'></div>"
@@ -293,9 +312,45 @@ def render_sidebar() -> SidebarConfig:
                 unsafe_allow_html=True,
             )
 
+        # ── [NEW] 연구용 메타데이터 패널 ──────────────────────────
+        if st.session_state.get("style_chosen"):
+            st.divider()
+            st.caption("📊 세션 현황")
+
+            completion_type  = st.session_state.get("completion_type") or "-"
+            total_turns      = st.session_state.get("total_turns", 0)
+            reframing_turns  = st.session_state.get("reframing_turns", 0)
+            stuck_count      = st.session_state.get("stuck_count", 0)
+            reframing_method = st.session_state.get("selected_reframing_methods") or "-"
+            progress_count   = st.session_state.get("progress_count", 0)
+
+            type_color = {
+                "normal":  "meta-normal",
+                "soft":    "meta-soft",
+                "timeout": "meta-timeout",
+            }.get(completion_type, "")
+
+            st.markdown(
+                f"<div class='meta-card'>"
+                f"<div class='meta-row'><span class='meta-label'>완료 유형</span>"
+                f"<span class='meta-value {type_color}'>{completion_type}</span></div>"
+                f"<div class='meta-row'><span class='meta-label'>전체 턴</span>"
+                f"<span class='meta-value'>{total_turns}</span></div>"
+                f"<div class='meta-row'><span class='meta-label'>재구조화 턴</span>"
+                f"<span class='meta-value'>{reframing_turns}</span></div>"
+                f"<div class='meta-row'><span class='meta-label'>변화 감지</span>"
+                f"<span class='meta-value'>{progress_count}회</span></div>"
+                f"<div class='meta-row'><span class='meta-label'>막힘 감지</span>"
+                f"<span class='meta-value'>{stuck_count}회</span></div>"
+                f"<div class='meta-row'><span class='meta-label'>재구조화 방법</span>"
+                f"<span class='meta-value'>{reframing_method}</span></div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
         st.divider()
 
-        # ── 원하는 대화 방향 ────────────────────────────────────
+        # ── 원하는 대화 방향 ────────────────────────────────────────
         st.caption("🧭 원하는 대화 방향이 있나요?")
         ph = "예) 위로보다는 해결책을 찾고 싶어요\n예) 엄마 입장도 이해해보고 싶어요"
         user_direction = st.text_area(
@@ -310,7 +365,7 @@ def render_sidebar() -> SidebarConfig:
 
         st.divider()
 
-        # ── 고급 설정 (비밀번호 잠금) ─────────────────────────────
+        # ── 고급 설정 ──────────────────────────────────────────────
         with st.expander("⚙️ 고급 설정", expanded=False):
             pw = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요", key="admin_pw")
             if pw == "1234":
@@ -321,13 +376,19 @@ def render_sidebar() -> SidebarConfig:
 
         st.divider()
 
-        # ── 대화 다운로드 ────────────────────────────────────────
+        # ── 대화 다운로드 ──────────────────────────────────────────
         messages = st.session_state.get("messages", [])
         profile  = {
-            "gender":      st.session_state.get("user_gender", "-"),
-            "age":         st.session_state.get("user_age", "-"),
-            "mood":        st.session_state.get("user_mood", "-"),
-            "style_label": STYLE_LABELS.get(st.session_state.get("chat_style", ""), "-"),
+            "gender":            st.session_state.get("user_gender", "-"),
+            "age":               st.session_state.get("user_age", "-"),
+            "mood":              st.session_state.get("user_mood", "-"),
+            "style_label":       STYLE_LABELS.get(st.session_state.get("chat_style", ""), "-"),
+            "reframing_methods": st.session_state.get("selected_reframing_methods", "-"),
+            # [NEW]
+            "completion_type":   st.session_state.get("completion_type", "-"),
+            "total_turns":       st.session_state.get("total_turns", 0),
+            "reframing_turns":   st.session_state.get("reframing_turns", 0),
+            "stuck_count":       st.session_state.get("stuck_count", 0),
         }
         fname = datetime.datetime.now().strftime("마음다시보기_%Y%m%d_%H%M")
 
@@ -363,7 +424,6 @@ def render_sidebar() -> SidebarConfig:
                     key="dl_json",
                 )
 
-            # ── DB 저장 버튼 ──────────────────────────────────────
             if st.button("☁️ DB에 저장", use_container_width=True, key="save_db"):
                 with st.spinner("저장 중..."):
                     ok = _save_to_supabase(messages, profile, mask=do_mask, api_key=_api_key)
@@ -375,7 +435,7 @@ def render_sidebar() -> SidebarConfig:
             st.caption("대화를 시작하면 다운로드할 수 있어요.")
         st.divider()
 
-        # ── 액션 버튼들 ─────────────────────────────────────────
+        # ── 액션 버튼 ──────────────────────────────────────────────
         if st.button("🗑️ 대화 초기화", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
