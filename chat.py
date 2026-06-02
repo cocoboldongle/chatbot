@@ -123,7 +123,11 @@ DISTORTION_SUFFIX = """
   - 구체적인 부정적 마음을 충분히 꺼낼 수 있도록 도와줘.
   - 틀렸다고 지적하는 게 아니라, 함께 살펴보는 느낌으로.
   - 청소년이 쉽게 이해할 수 있는 말로. 어려운 심리 용어 금지.
-  - 탐색이 충분히 됐다 싶으면, 부드럽게 다음 단계를 준비해줘.
+
+절대 하지 말아야 할 것:
+  - "언제든지 이야기해요", "응원할게요", "앞으로 잘 될 거예요" 같은 마무리 멘트 금지.
+  - 대화를 끝내는 것처럼 들리는 표현 금지. 이 단계는 시스템이 자동으로 다음 단계로 넘겨줘.
+  - 탐색이 됐다고 느껴도 절대 스스로 마무리하지 마. 계속 대화를 이어가.
 """
 
 REFRAMING_SUFFIX = """
@@ -578,6 +582,14 @@ def init_session() -> None:
         "completion_type":           None,    # "normal" | "soft" | "timeout"
         "total_turns":               0,       # 전체 사용자 발화 수
         "reframing_turns":           0,       # reframing 단계 사용자 발화 수
+        "last_distortions":          [],      # 추출된 왜곡 1~3순위 리스트
+        "selected_distortion":       None,    # 사용자가 선택한 왜곡
+        "selected_reframing_methods": "",     # GPT가 선택한 재구조화 방법
+        "reframing_summary":         "",      # 재구조화 완료 요약
+        "last_distortions":          [],      # 추출된 왜곡 1~3순위 리스트
+        "selected_distortion":       None,    # 사용자가 선택한 왜곡
+        "selected_reframing_methods": "",     # GPT가 선택한 재구조화 방법
+        "reframing_summary":         "",      # 재구조화 완료 요약
     }
     for key, val in defaults.items():
         if key not in st.session_state:
