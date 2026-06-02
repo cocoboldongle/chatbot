@@ -1250,9 +1250,12 @@ def render_chat_input(config: SidebarConfig) -> None:
                 f"유형: {selected.get('type')}\n"
                 f"이유: {selected.get('reason')}\n"
             )
-        # [NEW] stuck 감지 시 suffix에 추가 힌트 삽입
+        # stuck 감지 시 suffix에 추가 힌트 삽입
         if phase == "reframing" and st.session_state.get("stuck_count", 0) >= 1:
             suffix += "\n\n[힌트] 사용자가 재구조화에 어려움을 겪고 있는 것 같아. 더 부드럽게 접근하고, 억지로 변화를 끌어내려 하지 마. 오늘 이야기를 꺼내준 것 자체를 충분히 인정해줘."
+        # 변화 2회 감지 직전(1회)이면 마무리 준비 힌트 삽입
+        if phase == "reframing" and st.session_state.get("progress_count", 0) >= 1:
+            suffix += "\n\n[마무리 힌트] 사용자의 생각이 이미 긍정적으로 변화하고 있어. 이번 응답에서는 그 변화를 충분히 인정하고 격려해줘. 새로운 질문은 하지 말고, 오늘 함께 발견한 것을 따뜻하게 정리해주는 방식으로 마무리해줘."
 
     system = (
         style["prompt"] + suffix + extra
