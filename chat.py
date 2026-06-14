@@ -635,7 +635,7 @@ def render_survey() -> None:
     )
     nickname = st.text_input(
         "닉네임",
-        placeholder="예) 달빛토끼, 민준이 (연구 식별용, 실명 불필요)",
+        placeholder="예) 달빛토끼, 거제 야호",
         max_chars=20,
     )
     st.markdown("<br>", unsafe_allow_html=True)
