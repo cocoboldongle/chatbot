@@ -564,6 +564,7 @@ def init_session() -> None:
         "survey_done":               False,
         "style_chosen":              False,
         "messages":                  [],
+        "user_nickname":             None,
         "user_gender":               None,
         "user_age":                  None,
         "user_mood":                 None,
@@ -632,6 +633,12 @@ def render_survey() -> None:
         '</div></div>',
         unsafe_allow_html=True,
     )
+    nickname = st.text_input(
+        "닉네임",
+        placeholder="예) 달빛토끼, 민준이 (연구 식별용, 실명 불필요)",
+        max_chars=20,
+    )
+    st.markdown("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
         gender = st.radio("성별", options=["남성", "여성"], index=0)
@@ -648,11 +655,15 @@ def render_survey() -> None:
     )
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("다음 →", type="primary", use_container_width=True):
-        st.session_state.survey_done = True
-        st.session_state.user_gender = gender
-        st.session_state.user_age    = age
-        st.session_state.user_mood   = mood
-        st.rerun()
+        if not nickname.strip():
+            st.warning("닉네임을 입력해주세요. 실명이 아니어도 괜찮아요 😊")
+        else:
+            st.session_state.survey_done    = True
+            st.session_state.user_nickname  = nickname.strip()
+            st.session_state.user_gender    = gender
+            st.session_state.user_age       = age
+            st.session_state.user_mood      = mood
+            st.rerun()
 
 
 # ── STEP 2 : 스타일 선택 ─────────────────────────────────────────────────────
