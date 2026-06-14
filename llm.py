@@ -512,3 +512,57 @@ def mask_personal_info(
         return json.loads(raw[start:end]).get("masked_text", text)
     except Exception:
         return text
+
+
+# ── 종료 신호 감지 ─────────────────────────────────────────────────────────────
+
+EXIT_SIGNAL_PROMPT = """
+너는 대화 분석 전문가야. 아래 메시지 하나를 분석하고 JSON만 반환해. 다른 말은 절대 하지 마.
+
+[감지 목표]
+사용자가 대화를 끝내고 싶다는 의사를 표현하고 있는지 판단해.
+
+exit: true 조건 (아래 중 하나라도 해당하면 true):
+  - "그만", "끝내고 싶어", "됐어", "그냥 나갈게", "그만할게요" 같은 명시적 종료 의사
+  - "더 이야기하기 싫어요", "피곤해요 그냥", "이 대화 그만하고 싶어요" 같은 대화 거부 표현
+  - "알겠어요 이제", "충분해요", "이 정도면 됐어요" 같은 마무리 의사
+
+exit: false 조건:
+  - 단순히 힘들다거나 모르겠다는 표현 (대화 자체를 끝내려는 게 아님)
+  - 부정적인 감정 표현 ("싫어요", "다 포기하고 싶어요" 등)
+  - 애매하면 false
+
+반환 형식 (JSON만):
+{"exit": true} 또는 {"exit": false}
+"""
+
+
+def detect_exit_signal(
+    api_key: str,
+    message: str,
+    model: str = "gpt-4o",
+) -> bool:
+    """
+    사용자가 대화를 끝내고 싶다는 신호를 보내는지 감지.
+    True = 종료 의사 감지됨.
+    """
+    if not message or not message.strip():
+        return False
+
+    client   = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": EXIT_SIGNAL_PROMPT},
+            {"role": "user",   "content": message},
+        ],
+        temperature=0,
+        max_tokens=20,
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        return json.loads(raw[start:end]).get("exit", False)
+    except Exception:
+        return False
