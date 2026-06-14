@@ -1287,14 +1287,30 @@ def render_chat_input(config: SidebarConfig) -> None:
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-    # ── 재구조화: 완료 체크 → stuck 체크 (GPT 응답 생성 후) ─────────────────
+    # ── 재구조화: 완료/stuck/추천 병렬 처리 (GPT 응답 생성 후) ──────────────
+    from concurrent.futures import ThreadPoolExecutor
+
+    current_phase = st.session_state.get("phase", "collecting")
+    clean_for_suggest = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
+
     if phase == "reframing":
         start_idx = st.session_state.get("reframing_start_messages", 0)
         all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
         since_reframing = all_clean[start_idx:]
+        do_stuck = st.session_state.get("reframing_turns", 0) >= 3
+
+        # 판단 함수 병렬 실행 (읽기 전용 — session_state 변경 없음)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            f_complete = executor.submit(check_reframing_complete, api_key, since_reframing)
+            f_stuck    = executor.submit(check_reframing_stuck, api_key, since_reframing) if do_stuck else None
+            f_suggest  = executor.submit(generate_suggestions, api_key, clean_for_suggest) if current_phase not in ("done", "confirming", "selecting") else None
+
+        # 메인 스레드에서 결과 처리
+        result       = f_complete.result()
+        stuck_result = f_stuck.result() if f_stuck else {"stuck": False}
+        suggestions  = f_suggest.result() if f_suggest else []
 
         # 1) 정상 완료 체크
-        result = check_reframing_complete(api_key, since_reframing)
         if result.get("complete"):
             cnt = st.session_state.get("progress_count", 0) + 1
             st.session_state["progress_count"]    = cnt
@@ -1303,28 +1319,28 @@ def render_chat_input(config: SidebarConfig) -> None:
                 st.session_state.phase              = "done"
                 st.session_state["completion_type"] = "normal"
                 st.session_state["suggestions"]     = []
+            else:
+                st.session_state["suggestions"] = suggestions
             st.rerun()
 
-        # 2) stuck 체크 — 정상 완료 아닐 때만, 3턴 이상부터 작동
-        if st.session_state.get("reframing_turns", 0) >= 3:
-            stuck_result = check_reframing_stuck(api_key, since_reframing)
+        # 2) stuck 체크 — 정상 완료 아닐 때만
+        if do_stuck:
             if stuck_result.get("stuck"):
                 stuck_cnt = st.session_state.get("stuck_count", 0) + 1
                 st.session_state["stuck_count"] = stuck_cnt
                 if stuck_cnt >= 2:
-                    # 2회 연속 stuck → 소프트 완료 (마무리 멘트 생성 후 done)
                     _do_soft_complete(reason="stuck")
                     return
             else:
-                # stuck 아니면 카운터 리셋 (연속성 체크)
                 st.session_state["stuck_count"] = 0
 
-    # ── 답변 추천 생성 ────────────────────────────────────────────────────────
-    current_phase = st.session_state.get("phase", "collecting")
-    if current_phase not in ("done", "confirming", "selecting"):
-        clean_for_suggest = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
-        suggestions = generate_suggestions(api_key, clean_for_suggest)
         st.session_state["suggestions"] = suggestions
+
+    # ── 재구조화 외 단계: 답변 추천 생성 ────────────────────────────────────
+    else:
+        if current_phase not in ("done", "confirming", "selecting"):
+            st.session_state["suggestions"] = generate_suggestions(api_key, clean_for_suggest)
+
     st.rerun()
 
 
