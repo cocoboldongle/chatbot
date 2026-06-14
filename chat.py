@@ -635,7 +635,7 @@ def render_survey() -> None:
     )
     nickname = st.text_input(
         "닉네임",
-        placeholder="예) 달빛토끼, 거제 야호",
+        placeholder="예) 달빛토끼, 민준이 (연구 식별용, 실명 불필요)",
         max_chars=20,
     )
     st.markdown("<br>", unsafe_allow_html=True)
@@ -1134,9 +1134,43 @@ def _do_soft_complete(reason: str = "stuck") -> None:
     st.session_state.messages.append({"role": "assistant", "content": reply})
 
     # 완료 처리
-    st.session_state.phase           = "done"
-    st.session_state["completion_type"] = "timeout" if reason == "timeout" else "soft"
-    st.session_state["suggestions"]  = []
+    completion = "exit" if reason == "exit" else "soft"
+    st.session_state.phase              = "done"
+    st.session_state["completion_type"] = completion
+    st.session_state["suggestions"]     = []
+
+    # ── 자동 DB 저장 ──────────────────────────────────────────────────────────
+    try:
+        from sidebar import _save_to_supabase, _format_reframing_methods, _get_distortion_label
+        profile = {
+            "nickname":          st.session_state.get("user_nickname", "-"),
+            "gender":            st.session_state.get("user_gender", "-"),
+            "age":               st.session_state.get("user_age"),
+            "mood":              st.session_state.get("user_mood"),
+            "style_label":       st.session_state.get("chat_style", "-"),
+            "reframing_methods": _format_reframing_methods(st.session_state.get("selected_reframing_methods", "-")),
+            "completion_type":   completion,
+            "total_turns":       st.session_state.get("total_turns", 0),
+            "reframing_turns":   st.session_state.get("reframing_turns", 0),
+            "stuck_count":       st.session_state.get("stuck_count", 0),
+            "situation":         (st.session_state.get("collected_info") or {}).get("situation", "-"),
+            "thought":           (st.session_state.get("collected_info") or {}).get("thought", "-"),
+            "emotion":           (st.session_state.get("collected_info") or {}).get("emotion", "-"),
+            "intensity":         (st.session_state.get("collected_info") or {}).get("intensity", "-"),
+            "distortion_1":      _get_distortion_label(st.session_state.get("last_distortions", []), 0),
+            "distortion_2":      _get_distortion_label(st.session_state.get("last_distortions", []), 1),
+            "distortion_3":      _get_distortion_label(st.session_state.get("last_distortions", []), 2),
+            "selected_distortion_type": (st.session_state.get("selected_distortion") or {}).get("type", "-"),
+        }
+        _save_to_supabase(
+            messages=st.session_state.messages,
+            profile=profile,
+            mask=True,
+            api_key=api_key,
+        )
+    except Exception:
+        pass  # 자동 저장 실패해도 대화 흐름에 영향 없음
+
     st.rerun()
 
 
@@ -1330,6 +1364,37 @@ def render_chat_input(config: SidebarConfig) -> None:
                 st.session_state.phase              = "done"
                 st.session_state["completion_type"] = "normal"
                 st.session_state["suggestions"]     = []
+                # ── 정상 완료 자동 DB 저장 ────────────────────────────────
+                try:
+                    from sidebar import _save_to_supabase, _format_reframing_methods, _get_distortion_label
+                    _auto_profile = {
+                        "nickname":          st.session_state.get("user_nickname", "-"),
+                        "gender":            st.session_state.get("user_gender", "-"),
+                        "age":               st.session_state.get("user_age"),
+                        "mood":              st.session_state.get("user_mood"),
+                        "style_label":       st.session_state.get("chat_style", "-"),
+                        "reframing_methods": _format_reframing_methods(st.session_state.get("selected_reframing_methods", "-")),
+                        "completion_type":   "normal",
+                        "total_turns":       st.session_state.get("total_turns", 0),
+                        "reframing_turns":   st.session_state.get("reframing_turns", 0),
+                        "stuck_count":       st.session_state.get("stuck_count", 0),
+                        "situation":         (st.session_state.get("collected_info") or {}).get("situation", "-"),
+                        "thought":           (st.session_state.get("collected_info") or {}).get("thought", "-"),
+                        "emotion":           (st.session_state.get("collected_info") or {}).get("emotion", "-"),
+                        "intensity":         (st.session_state.get("collected_info") or {}).get("intensity", "-"),
+                        "distortion_1":      _get_distortion_label(st.session_state.get("last_distortions", []), 0),
+                        "distortion_2":      _get_distortion_label(st.session_state.get("last_distortions", []), 1),
+                        "distortion_3":      _get_distortion_label(st.session_state.get("last_distortions", []), 2),
+                        "selected_distortion_type": (st.session_state.get("selected_distortion") or {}).get("type", "-"),
+                    }
+                    _save_to_supabase(
+                        messages=st.session_state.messages,
+                        profile=_auto_profile,
+                        mask=True,
+                        api_key=api_key,
+                    )
+                except Exception:
+                    pass
             else:
                 st.session_state["suggestions"] = suggestions
             st.rerun()
