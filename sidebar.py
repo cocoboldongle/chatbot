@@ -172,6 +172,7 @@ def _build_txt(messages: list, profile: dict, mask: bool = False, api_key: str =
         "       🌱 마음 다시 보기 — 대화 기록",
         "═══════════════════════════════════",
         f"저장 일시       : {now}",
+        f"닉네임          : {profile.get('nickname', '-')}",
         f"성별            : {profile.get('gender', '-')}",
         f"나이            : {profile.get('age', '-')}세",
         f"기분 점수       : {profile.get('mood', '-')}/10",
@@ -240,6 +241,7 @@ def _save_to_supabase(messages: list, profile: dict, mask: bool, api_key: str) -
             masked = clean_messages
 
         payload = {
+            "nickname":           profile.get("nickname", "-"),
             "gender":             profile.get("gender", "-"),
             "age":                profile.get("age"),
             "mood":               profile.get("mood"),
@@ -296,8 +298,11 @@ def render_sidebar() -> SidebarConfig:
             mood       = st.session_state.get("user_mood", 5)
             mood_emoji = MOOD_EMOJIS[int(mood)] if isinstance(mood, (int, float)) else "😐"
 
+            nickname   = st.session_state.get("user_nickname", "-")
             st.markdown(
                 f"<div class='profile-card'>"
+                f"<div class='profile-row'><span class='profile-label'>닉네임</span>"
+                f"<span class='profile-value'>{nickname}</span></div>"
                 f"<div class='profile-row'><span class='profile-label'>성별</span>"
                 f"<span class='profile-value'>{gender}</span></div>"
                 f"<div class='profile-row'><span class='profile-label'>나이</span>"
@@ -453,6 +458,7 @@ def render_sidebar() -> SidebarConfig:
         # ── 대화 다운로드 ──────────────────────────────────────────
         messages = st.session_state.get("messages", [])
         profile  = {
+            "nickname":          st.session_state.get("user_nickname", "-"),
             "gender":            st.session_state.get("user_gender", "-"),
             "age":               st.session_state.get("user_age", "-"),
             "mood":              st.session_state.get("user_mood", "-"),
@@ -534,6 +540,7 @@ def render_sidebar() -> SidebarConfig:
                 "suggestions":               [],
                 "stuck_count":               0,
                 "completion_type":           None,
+                "user_nickname":             None,
                 "total_turns":               0,
                 "reframing_turns":           0,
                 "selected_reframing_methods": "",
