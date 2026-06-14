@@ -7,6 +7,7 @@ from llm import (
     stream_chat, check_info_sufficient, extract_distortions,
     check_distortion_sufficient, check_reframing_complete,
     check_reframing_stuck, generate_suggestions, detect_crisis,
+    detect_exit_signal,
 )
 from sidebar import SidebarConfig
 
@@ -192,8 +193,6 @@ REFRAMING_STUCK_SUFFIX = """
 
 MOOD_EMOJIS = ["😭", "😢", "😟", "😕", "😐", "🙂", "😊", "😄", "😁", "🤩", "🥳"]
 
-# 재구조화 최대 턴 수 (사용자 발화 기준) — 이 이상이면 강제 소프트 완료
-REFRAMING_MAX_TURNS = 12
 
 CSS = """
 <style>
@@ -1206,14 +1205,13 @@ def render_chat_input(config: SidebarConfig) -> None:
             st.session_state["suggestions"] = []
             _start_reframing()
 
-    # ── 재구조화 단계: 턴 카운터 + 타임아웃 선체크 ──────────────────────────
+    # ── 재구조화 단계: 턴 카운터 + 종료 신호 선체크 ─────────────────────────
     elif phase == "reframing":
         st.session_state["reframing_turns"] = st.session_state.get("reframing_turns", 0) + 1
-        reframing_turns = st.session_state["reframing_turns"]
 
-        # 타임아웃: GPT 응답 전에 최대 턴 초과 여부만 먼저 체크
-        if reframing_turns >= REFRAMING_MAX_TURNS:
-            _do_soft_complete(reason="timeout")
+        # 종료 신호 감지 — GPT 응답 생성 전에 먼저 체크
+        if detect_exit_signal(api_key, prompt):
+            _do_soft_complete(reason="exit")
             return
 
     style  = STYLES[st.session_state.chat_style]
