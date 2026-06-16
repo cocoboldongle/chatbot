@@ -530,6 +530,12 @@ hr  { border-color: #e8edf2 !important; margin: 8px 0 16px 0 !important; }
 
 NOTICE_HTML = """
 <div class="notice-wrap">
+  <div class="notice-warn" style="border-color:#f59e0b;background:#fffbeb;">
+    🎫 <b style="color:#92400e;">참여 닉네임 안내</b><br>
+    연구팀에서 <b>사전에 부여한 닉네임</b>으로만 접속해주세요.<br>
+    부여받은 닉네임으로 접속해야 <b>인센티브 지급 대상</b>으로 인정됩니다.<br>
+    임의로 닉네임을 변경하거나 닉네임을 부여받지 않은 경우 연구팀에 먼저 문의해주세요.
+  </div>
   <div class="notice-card">
     <div class="notice-card-title">📌 이 챗봇은 무엇인가요?</div>
     <div class="notice-card-sub">교육 및 자기돌봄 도구입니다. 전문 심리치료가 아닙니다.</div>
@@ -544,14 +550,6 @@ NOTICE_HTML = """
     <div class="notice-row">❌&nbsp;<span>심리 진단이나 치료</span></div>
     <div class="notice-row">❌&nbsp;<span>응급 위기 개입</span></div>
     <div class="notice-row">❌&nbsp;<span>약물 처방이나 의학적 조언</span></div>
-  </div>
-  <div class="notice-card">
-    <div class="notice-card-title">🎫 참여 닉네임 안내</div>
-    <div class="notice-card-sub">파일럿 연구 참여자에게 해당하는 내용이에요.</div>
-    <div class="notice-row">✅&nbsp;<span>닉네임은 <b>연구팀이 사전에 부여한 고유 닉네임</b>을 사용해주세요.</span></div>
-    <div class="notice-row">✅&nbsp;<span>부여받은 닉네임으로 접속해야 <b>인센티브 지급 대상</b>으로 인정됩니다.</span></div>
-    <div class="notice-row">❌&nbsp;<span>임의로 닉네임을 변경하면 참여 기록이 확인되지 않을 수 있어요.</span></div>
-    <div class="notice-row">❌&nbsp;<span>닉네임을 부여받지 않은 경우 연구팀에 먼저 문의해주세요.</span></div>
   </div>
   <div class="notice-warn">
     ⚠️ <b>이 챗봇은 AI입니다. 진짜 사람이 아닙니다.</b><br>
