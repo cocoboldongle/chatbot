@@ -545,6 +545,14 @@ NOTICE_HTML = """
     <div class="notice-row">❌&nbsp;<span>응급 위기 개입</span></div>
     <div class="notice-row">❌&nbsp;<span>약물 처방이나 의학적 조언</span></div>
   </div>
+  <div class="notice-card">
+    <div class="notice-card-title">🎫 참여 닉네임 안내</div>
+    <div class="notice-card-sub">파일럿 연구 참여자에게 해당하는 내용이에요.</div>
+    <div class="notice-row">✅&nbsp;<span>닉네임은 <b>연구팀이 사전에 부여한 고유 닉네임</b>을 사용해주세요.</span></div>
+    <div class="notice-row">✅&nbsp;<span>부여받은 닉네임으로 접속해야 <b>인센티브 지급 대상</b>으로 인정됩니다.</span></div>
+    <div class="notice-row">❌&nbsp;<span>임의로 닉네임을 변경하면 참여 기록이 확인되지 않을 수 있어요.</span></div>
+    <div class="notice-row">❌&nbsp;<span>닉네임을 부여받지 않은 경우 연구팀에 먼저 문의해주세요.</span></div>
+  </div>
   <div class="notice-warn">
     ⚠️ <b>이 챗봇은 AI입니다. 진짜 사람이 아닙니다.</b><br>
     AI는 당신을 진정으로 이해하거나 공감할 수 없습니다.<br>
@@ -633,9 +641,16 @@ def render_survey() -> None:
         '</div></div>',
         unsafe_allow_html=True,
     )
+    st.markdown(
+        "<div style='font-size:0.82rem;color:#92400e;background:#fff7ed;border:1px solid #fed7aa;"
+        "border-radius:10px;padding:10px 14px;margin-bottom:8px;'>"
+        "🎫 <b>연구팀에서 부여받은 닉네임</b>을 입력해주세요. "
+        "임의로 변경하면 인센티브 지급 대상에서 제외될 수 있어요.</div>",
+        unsafe_allow_html=True,
+    )
     nickname = st.text_input(
         "닉네임",
-        placeholder="예) 달빛토끼, 민준이 (연구 식별용, 실명 불필요)",
+        placeholder="연구팀에서 부여받은 닉네임을 입력하세요",
         max_chars=20,
     )
     st.markdown("<br>", unsafe_allow_html=True)
