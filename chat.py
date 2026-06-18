@@ -583,6 +583,7 @@ def init_session() -> None:
         "progress_count":            0,
         "crisis_modal_shown":        False,
         "suggestions":               [],
+        "distortion_retry_count":    0,       # distortion 재시도(추가 탐색) 시도 횟수
         # [NEW] 막힘 감지 및 연구용 메타데이터
         "stuck_count":               0,       # 연속 막힘 감지 횟수
         "completion_type":           None,    # "normal" | "soft" | "timeout"
@@ -592,7 +593,6 @@ def init_session() -> None:
         "selected_distortion":       None,    # 사용자가 선택한 왜곡
         "selected_reframing_methods": "",     # GPT가 선택한 재구조화 방법
         "reframing_summary":         "",      # 재구조화 완료 요약
-        "last_distortions":          [],      # 추출된 왜곡 1~3순위 리스트
         "selected_distortion":       None,    # 사용자가 선택한 왜곡
         "selected_reframing_methods": "",     # GPT가 선택한 재구조화 방법
         "reframing_summary":         "",      # 재구조화 완료 요약
@@ -1253,15 +1253,32 @@ def render_chat_input(config: SidebarConfig) -> None:
         elif result.get("negative") is False:
             st.session_state["_hint_positive"] = True
 
-    # ── 인지왜곡 탐색 단계 ───────────────────────────────────────────────────
+    # ── 인지왜곡 탐색 단계: 충분성 + 종료신호 + 2단계 안전망 ────────────────
     elif phase == "distortion":
         distortion_msgs = st.session_state.get("distortion_start_messages", 0)
         all_clean = [m for m in st.session_state.messages if m.get("role") in ("user", "assistant")]
         since_distortion = all_clean[distortion_msgs:]
-        if check_distortion_sufficient(api_key, since_distortion):
+
+        # 사용자가 명시적으로 종료 의사를 보이면 즉시 안전망 단계로
+        user_wants_exit = detect_exit_signal(api_key, prompt)
+        is_sufficient    = check_distortion_sufficient(api_key, since_distortion)
+
+        if is_sufficient:
             st.session_state.phase = "reframing"
+            st.session_state["distortion_retry_count"] = 0
             st.session_state["suggestions"] = []
             _start_reframing()
+
+        elif user_wants_exit:
+            retry = st.session_state.get("distortion_retry_count", 0)
+            if retry == 0:
+                # 1차: "다른 힘든 일은 없었는지" 한 번 더 물어보기
+                st.session_state["distortion_retry_count"] = 1
+                st.session_state["_distortion_retry_prompt"] = True
+            else:
+                # 2차 이후에도 종료 의사 → 바로 소프트 완료
+                _do_soft_complete(reason="exit")
+                return
 
     # ── 재구조화 단계: 턴 카운터 + 종료 신호 선체크 ─────────────────────────
     elif phase == "reframing":
@@ -1287,6 +1304,17 @@ def render_chat_input(config: SidebarConfig) -> None:
             suffix = INFO_GATHERING_SUFFIX
         elif phase == "distortion":
             suffix = DISTORTION_SUFFIX
+            # 재시도 플래그가 설정되어 있으면 "다른 힘든 일" 탐색 지시 추가
+            if st.session_state.pop("_distortion_retry_prompt", False):
+                suffix += """
+
+[추가 지시: 재탐색]
+지금까지 탐색한 생각 패턴이 충분히 잡히지 않았거나, 사용자가 대화를 마무리하고 싶어하는 것 같아.
+바로 마무리하지 말고, 자연스럽게 이렇게 물어봐:
+"그것 말고도 요즘 힘들거나 신경 쓰이는 다른 일은 없어?" 같은 식으로,
+지금까지 나온 이야기를 가볍게 정리하면서 다른 고민이 있는지 한 번만 더 확인해줘.
+사용자가 없다고 하거나 여전히 마무리하고 싶어하면, 더 캐묻지 말고 자연스럽게 받아들여줘.
+"""
         else:
             suffix = REFRAMING_SUFFIX
 
