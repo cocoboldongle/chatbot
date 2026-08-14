@@ -584,18 +584,17 @@ def init_session() -> None:
         "crisis_modal_shown":        False,
         "suggestions":               [],
         "distortion_retry_count":    0,       # distortion 재시도(추가 탐색) 시도 횟수
-        # [NEW] 막힘 감지 및 연구용 메타데이터
+        # 막힘 감지 및 연구용 메타데이터
         "stuck_count":               0,       # 연속 막힘 감지 횟수
-        "completion_type":           None,    # "normal" | "soft" | "timeout"
+        "completion_type":           None,    # "normal" | "soft" | "exit"
         "total_turns":               0,       # 전체 사용자 발화 수
         "reframing_turns":           0,       # reframing 단계 사용자 발화 수
         "last_distortions":          [],      # 추출된 왜곡 1~3순위 리스트
         "selected_distortion":       None,    # 사용자가 선택한 왜곡
         "selected_reframing_methods": "",     # GPT가 선택한 재구조화 방법
         "reframing_summary":         "",      # 재구조화 완료 요약
-        "selected_distortion":       None,    # 사용자가 선택한 왜곡
-        "selected_reframing_methods": "",     # GPT가 선택한 재구조화 방법
-        "reframing_summary":         "",      # 재구조화 완료 요약
+        "session_start":             None,    # 첫 사용자 입력 시각 (체류 시간 계산용)
+        "final_phase":               None,    # 마지막 도달 단계 (탈락 시점 기록용)
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -1174,6 +1173,8 @@ def _do_soft_complete(reason: str = "stuck") -> None:
             "distortion_2":      _get_distortion_label(st.session_state.get("last_distortions", []), 1),
             "distortion_3":      _get_distortion_label(st.session_state.get("last_distortions", []), 2),
             "selected_distortion_type": (st.session_state.get("selected_distortion") or {}).get("type", "-"),
+            "session_start":     st.session_state.get("session_start", "-"),
+            "final_phase":       st.session_state.get("final_phase", "-"),
         }
         _save_to_supabase(
             messages=st.session_state.messages,
@@ -1226,8 +1227,16 @@ def render_chat_input(config: SidebarConfig) -> None:
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state["suggestions"] = []
-    # [NEW] 전체 턴 카운터 증가
+    # 전체 턴 카운터 증가
     st.session_state["total_turns"] = st.session_state.get("total_turns", 0) + 1
+
+    # 첫 사용자 입력 시각 기록 (session_start가 없을 때만)
+    if not st.session_state.get("session_start"):
+        import datetime as _dt
+        st.session_state["session_start"] = _dt.datetime.now(tz=_dt.timezone.utc).isoformat()
+
+    # 현재 단계를 final_phase에 항상 업데이트 (탈락 시점 추적)
+    st.session_state["final_phase"] = st.session_state.get("phase", "collecting")
 
     with st.chat_message("user", avatar="🧑"):
         st.markdown(prompt)
@@ -1427,6 +1436,8 @@ def render_chat_input(config: SidebarConfig) -> None:
                         "distortion_2":      _get_distortion_label(st.session_state.get("last_distortions", []), 1),
                         "distortion_3":      _get_distortion_label(st.session_state.get("last_distortions", []), 2),
                         "selected_distortion_type": (st.session_state.get("selected_distortion") or {}).get("type", "-"),
+                        "session_start":     st.session_state.get("session_start", "-"),
+                        "final_phase":       st.session_state.get("final_phase", "-"),
                     }
                     _save_to_supabase(
                         messages=st.session_state.messages,
